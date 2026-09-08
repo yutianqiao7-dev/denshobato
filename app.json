@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "denshobato",
+    "name": "伝書鳩",
     "slug": "denshobato",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -19,7 +19,14 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-notifications"
+    ],
+    "experiments": {
+      "baseUrl": "/denshobato"
     }
   }
 }
