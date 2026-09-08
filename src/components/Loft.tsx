@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
   perch: {
     position: 'absolute',
     // 止まり木の板の上に立たせる
-    top: `${((BOARD_Y - 34) / H) * 100}%`,
+    top: `${((BOARD_Y - 29) / H) * 100}%`,
     width: 46,
     marginLeft: -23,
     alignItems: 'center',
@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
   tag: {
     fontSize: 10,
     color: theme.inkSoft,
-    marginTop: 14,
+    marginTop: 20,
     maxWidth: 60,
   },
   flyer: { position: 'absolute', left: 0 },
