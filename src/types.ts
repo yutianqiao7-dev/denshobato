@@ -82,6 +82,11 @@ export type Letter = {
   /** 足環の色 */
   ring: string;
   read: boolean;
+  /**
+   * 放った手紙の QR を、相手に読んでもらったか。
+   * これを渡すまで、相手の端末にはこの手紙が存在しない。
+   */
+  handedOver?: boolean;
   notificationId?: string;
 };
 

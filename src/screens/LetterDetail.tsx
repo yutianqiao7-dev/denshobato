@@ -35,7 +35,7 @@ export function LetterDetail({
   onClose: () => void;
   onRewrite: (letter: Letter) => void;
 }) {
-  const { state, markRead, removeLetter } = useStore();
+  const { state, markRead, markHandedOver, removeLetter } = useStore();
   const now = useNow(1000);
   const [showCode, setShowCode] = useState(false);
 
@@ -189,6 +189,11 @@ export function LetterDetail({
 
           {outbound && status !== 'lost' && (
             <View style={{ marginTop: 24 }}>
+              {!live.handedOver && (
+                <Text style={styles.notHanded}>
+                  この手紙は、まだ{live.peerName}さんに渡していません
+                </Text>
+              )}
               <QrView value={code} size={200} />
               <Button
                 label="手紙コードを相手に送る"
@@ -201,6 +206,13 @@ export function LetterDetail({
                 この QR を読んでもらうと相手の鳩舎へ帰り着きます。
                 いま読んでもらってかまいません。中身は到着まで開きません。
               </Muted>
+              {!live.handedOver && (
+                <Button
+                  label="読んでもらった"
+                  onPress={() => markHandedOver(live.id)}
+                  style={{ marginTop: 12 }}
+                />
+              )}
               <Pressable onPress={() => setShowCode((v) => !v)}>
                 <Text style={styles.link}>
                   {showCode ? 'コードを隠す' : 'コードを表示してコピーする'}
@@ -286,6 +298,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   link: { color: theme.accent, fontSize: 14, marginTop: 14 },
+  notHanded: {
+    color: theme.accent,
+    fontSize: 14,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
   code: {
     marginTop: 10,
     padding: 12,

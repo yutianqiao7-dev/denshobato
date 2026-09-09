@@ -80,6 +80,8 @@ type Store = {
   releaseLetter: (pigeonId: string, body: string) => Promise<SendResult>;
   receiveCode: (code: string) => Promise<ReceiveResult>;
   markRead: (letterId: string) => void;
+  /** 手紙の QR を相手に読んでもらった */
+  markHandedOver: (letterId: string) => void;
   removeLetter: (letterId: string) => void;
   removePigeon: (pigeonId: string) => void;
   setSpeed: (kmh: number) => void;
@@ -489,6 +491,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const markHandedOver = useCallback((letterId: string) => {
+    setState((s) => ({
+      ...s,
+      letters: s.letters.map((l) =>
+        l.id === letterId ? { ...l, handedOver: true } : l
+      ),
+    }));
+  }, []);
+
   const markRead = useCallback((letterId: string) => {
     setState((s) => ({
       ...s,
@@ -540,6 +551,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       releaseLetter,
       receiveCode,
       markRead,
+      markHandedOver,
       removeLetter,
       removePigeon,
       setSpeed,
@@ -562,6 +574,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       releaseLetter,
       receiveCode,
       markRead,
+      markHandedOver,
       removeLetter,
       removePigeon,
       setSpeed,

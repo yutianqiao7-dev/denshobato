@@ -41,6 +41,12 @@ export function LetterCard({
         {status === 'arrived' && !letter.read && <View style={styles.unread} />}
       </View>
 
+      {outbound && !letter.handedOver && status !== 'lost' && (
+        <Text style={styles.notHanded}>
+          まだ{letter.peerName}さんに渡していません
+        </Text>
+      )}
+
       {status === 'flying' && (
         <>
           <PigeonProgress
@@ -109,6 +115,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   eta: { marginTop: 10, fontSize: 14, color: theme.ink },
+  notHanded: { marginTop: 8, fontSize: 12, color: theme.accent },
   etaFaint: { fontSize: 12, color: theme.inkFaint, marginTop: 6 },
   lostText: { marginTop: 10, fontSize: 14, color: theme.inkSoft },
   snippet: {

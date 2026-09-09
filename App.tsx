@@ -14,6 +14,7 @@ import { SettingsScreen } from './src/screens/SettingsScreen';
 import { ComposeScreen, Draft } from './src/screens/ComposeScreen';
 import { LetterDetail } from './src/screens/LetterDetail';
 import { Notice, Received, ReceiveScreen } from './src/screens/ReceiveScreen';
+import { LetterHandover } from './src/screens/LetterHandover';
 import { ConfirmHost } from './src/confirm';
 import { flyAway, FlyAwayHost } from './src/flyaway';
 import { PigeonMark, variantFor } from './src/pigeonArt';
@@ -58,6 +59,7 @@ function Main() {
   const [receiving, setReceiving] = useState(false);
   const [open, setOpen] = useState<Letter | null>(null);
   const [notice, setNotice] = useState<NoticeState | null>(null);
+  const [handover, setHandover] = useState<Letter | null>(null);
 
   const unread = useMemo(
     () =>
@@ -154,9 +156,10 @@ function Main() {
           setComposing(false);
           setDraft(null);
           setTab('sky');
-          // 放った鳩が飛び去るのを見せてから、行き先を知らせる
+          // 放った鳩が飛び去るのを見せてから、相手へ渡すところへ進む。
+          // ここを渡さないと相手には届かないので、素通りさせない。
           flyAway(letter.pigeonVariant ?? variantFor(letter.pigeonId), () =>
-            setNotice(noticeForLetter(letter))
+            setHandover(letter)
           );
         }}
         onNeedPigeon={() => setTab('roost')}
@@ -181,6 +184,13 @@ function Main() {
 
       <ConfirmHost />
       <FlyAwayHost />
+
+      {handover && (
+        <LetterHandover
+          letter={handover}
+          onClose={() => setHandover(null)}
+        />
+      )}
 
       {notice && (
         <Notice

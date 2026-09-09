@@ -26,6 +26,17 @@ export function SkyScreen({
     [state.letters, now]
   );
 
+  const notHanded = useMemo(
+    () =>
+      state.letters.filter(
+        (l) =>
+          l.direction === 'outbound' &&
+          !l.handedOver &&
+          letterStatus(l, now) !== 'lost'
+      ).length,
+    [state.letters, now]
+  );
+
   const releasable = useMemo(
     () => releasablePigeons(state.pigeons, state.letters, now),
     [state.pigeons, state.letters, now]
@@ -43,6 +54,12 @@ export function SkyScreen({
             ? `・預かった鳩が${releasable.length}羽`
             : '・放てる鳩がいません'}
         </Text>
+        {notHanded > 0 && (
+          <Text style={styles.todo}>
+            {notHanded}通、まだ相手に渡していません。手紙を開いて QR
+            を読んでもらってください。
+          </Text>
+        )}
 
         {flying.length === 0 ? (
           <Empty
@@ -79,7 +96,13 @@ const styles = StyleSheet.create({
     color: theme.ink,
     letterSpacing: 4,
   },
-  sub: { color: theme.inkFaint, fontSize: 13, marginTop: 6, marginBottom: 22 },
+  sub: { color: theme.inkFaint, fontSize: 13, marginTop: 6, marginBottom: 10 },
+  todo: {
+    color: theme.accent,
+    fontSize: 13,
+    lineHeight: 20,
+    marginBottom: 18,
+  },
   fabWrap: {
     position: 'absolute',
     left: 20,
