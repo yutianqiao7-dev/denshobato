@@ -1,10 +1,11 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { PigeonFlyer } from '../pigeonArt';
 import { theme } from '../theme';
 
 type Props = {
   progress: number;
-  emoji: string;
+  variant?: string;
   ring: string;
   fromName: string;
   toName: string;
@@ -15,7 +16,7 @@ type Props = {
 /** 空の上を鳩が進んでいく帯 */
 export function PigeonProgress({
   progress,
-  emoji,
+  variant,
   ring,
   fromName,
   toName,
@@ -32,9 +33,11 @@ export function PigeonProgress({
           ]}
         />
         <View style={[styles.bird, { left: `${pct * 100}%` }]}>
-          <Text style={[styles.birdText, lost && styles.birdLost]}>
-            {lost ? '·' : emoji}
-          </Text>
+          {lost ? (
+            <Text style={styles.birdLost}>·</Text>
+          ) : (
+            <PigeonFlyer variant={variant} size={26} />
+          )}
         </View>
       </View>
       <View style={styles.labels}>
@@ -65,7 +68,6 @@ const styles = StyleSheet.create({
     marginLeft: -14,
     alignItems: 'center',
   },
-  birdText: { fontSize: 18 },
   birdLost: { fontSize: 26, color: theme.inkFaint, lineHeight: 20 },
   labels: { flexDirection: 'row', justifyContent: 'space-between' },
   label: { color: theme.inkFaint, fontSize: 12, maxWidth: '45%' },

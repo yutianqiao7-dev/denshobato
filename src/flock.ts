@@ -15,6 +15,9 @@ export function lastSeenAt(letter: Letter, now: number): number {
   return letter.lostAt !== undefined ? Math.min(now, letter.lostAt) : now;
 }
 
+/** 巣箱の数。手元に置ける鳩の上限 */
+export const LOFT_CAPACITY = 10;
+
 const HOUR = 3600 * 1000;
 
 /** 世話をしないとこうなる、の目安 */

@@ -15,6 +15,7 @@ import { ComposeScreen, Draft } from './src/screens/ComposeScreen';
 import { LetterDetail } from './src/screens/LetterDetail';
 import { Notice, Received, ReceiveScreen } from './src/screens/ReceiveScreen';
 import { ConfirmHost } from './src/confirm';
+import { PigeonMark, variantFor } from './src/pigeonArt';
 
 type Tab = 'sky' | 'box' | 'roost' | 'settings';
 
@@ -25,7 +26,7 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'settings', label: '設定', icon: '⚙️' },
 ];
 
-type NoticeState = { emoji: string; title: string; detail: string };
+type NoticeState = { variant: string; title: string; detail: string };
 
 function noticeForLetter(letter: Letter): NoticeState {
   const remaining = letter.arrivesAt - Date.now();
@@ -36,7 +37,7 @@ function noticeForLetter(letter: Letter): NoticeState {
         )} 着の予定`
       : 'まもなく着きます';
   return {
-    emoji: letter.pigeonEmoji,
+    variant: letter.pigeonVariant ?? variantFor(letter.pigeonId),
     title:
       letter.direction === 'inbound'
         ? `${letter.pigeonName}が帰ってきます`
@@ -98,7 +99,7 @@ function Main() {
     } else {
       setTab('roost');
       setNotice({
-        emoji: result.pigeon.emoji,
+        variant: result.pigeon.variant,
         title: `${result.pigeon.name}を預かりました`,
         detail: `${result.pigeon.ownerName}さんの鳩です。世話をするのはあなた。放てば${result.pigeon.loft.name}へ帰ります。`,
       });
@@ -178,7 +179,7 @@ function Main() {
 
       {notice && (
         <Notice
-          emoji={notice.emoji}
+          mark={<PigeonMark variant={notice.variant} size={54} />}
           title={notice.title}
           detail={notice.detail}
           onClose={() => setNotice(null)}

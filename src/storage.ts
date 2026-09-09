@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, DEFAULT_SETTINGS, Letter, Pigeon, Place } from './types';
+import { variantFor } from './pigeonArt';
 
 const KEY = 'denshobato:state:v1';
 
@@ -53,9 +54,10 @@ function migratePigeon(
   home: Place | null,
   now: number
 ): Pigeon {
-  if (pigeon.custody && pigeon.loft) return pigeon;
+  if (pigeon.custody && pigeon.loft && pigeon.variant) return pigeon;
   return {
     ...pigeon,
+    variant: pigeon.variant ?? variantFor(pigeon.id),
     mine: pigeon.mine ?? true,
     ownerName: pigeon.ownerName ?? myName,
     loft: pigeon.loft ?? home ?? { name: '鳩舎', lat: 0, lng: 0 },

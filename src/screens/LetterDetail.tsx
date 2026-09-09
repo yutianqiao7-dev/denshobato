@@ -21,6 +21,7 @@ import { lastSeenAt, letterStatus } from '../flock';
 import { radius, theme } from '../theme';
 import { Button, Muted } from '../components/ui';
 import { PigeonProgress } from '../components/PigeonProgress';
+import { PigeonMark, variantFor } from '../pigeonArt';
 import { encodeLetter } from '../pigeonCode';
 import { confirmDestructive } from '../confirm';
 
@@ -53,6 +54,7 @@ export function LetterDetail({
   if (!live) return null;
 
   const outbound = live.direction === 'outbound';
+  const variant = live.pigeonVariant ?? variantFor(live.pigeonId);
   const code = encodeLetter(live, state.myName);
   const readable = outbound || status === 'arrived';
 
@@ -99,17 +101,20 @@ export function LetterDetail({
             <Muted>
               {formatDistance(live.distanceKm)}・{formatDateTime(live.sentAt)}発
             </Muted>
-            <Muted>
-              {live.pigeonEmoji} {live.pigeonName}（
-              {outbound ? `${live.peerName}さんの鳩` : 'あなたの鳩'}）
-            </Muted>
+            <View style={styles.pigeonLine}>
+              <PigeonMark variant={variant} size={26} />
+              <Muted>
+                {live.pigeonName}（
+                {outbound ? `${live.peerName}さんの鳩` : 'あなたの鳩'}）
+              </Muted>
+            </View>
           </View>
 
           {status === 'flying' && (
             <View style={styles.flightBox}>
               <PigeonProgress
                 progress={progressOf(live, now)}
-                emoji={live.pigeonEmoji}
+                variant={variant}
                 ring={live.ring}
                 fromName={live.from.name}
                 toName={live.to.name}
@@ -125,7 +130,7 @@ export function LetterDetail({
             <View style={styles.lostBox}>
               <PigeonProgress
                 progress={progressOf(live, lastSeenAt(live, now))}
-                emoji={live.pigeonEmoji}
+                variant={variant}
                 ring={live.ring}
                 fromName={live.from.name}
                 toName={live.to.name}
@@ -238,6 +243,7 @@ const styles = StyleSheet.create({
   body: { padding: 20 },
   meta: { marginBottom: 16 },
   metaMain: { fontSize: 15, color: theme.ink, marginBottom: 4 },
+  pigeonLine: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
   flightBox: {
     backgroundColor: theme.paperDeep,
     borderRadius: radius.md,

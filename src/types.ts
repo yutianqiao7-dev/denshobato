@@ -27,6 +27,8 @@ export type Pigeon = {
   id: string;
   name: string;
   emoji: string;
+  /** 羽色 (src/pigeonArt.tsx の PLUMAGES) */
+  variant: string;
   takenInAt: number;
   /** 自分が育てた鳩か。false なら誰かから預かっている鳩 */
   mine: boolean;
@@ -55,6 +57,8 @@ export type Letter = {
   pigeonId: string;
   pigeonName: string;
   pigeonEmoji: string;
+  /** 運んでいる鳩の羽色 */
+  pigeonVariant?: string;
   /** 放った場所 */
   from: Place;
   /** 鳩が帰る場所 */

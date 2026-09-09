@@ -9,122 +9,158 @@ import {
   View,
 } from 'react-native';
 import Svg, { Ellipse, G, Path, Rect } from 'react-native-svg';
-import { Letter, Pigeon } from '../types';
-import { Health, healthOf } from '../flock';
+import { Pigeon } from '../types';
+import { Health, healthOf, LOFT_CAPACITY } from '../flock';
+import { PigeonFlyer, PigeonMark } from '../pigeonArt';
 import { theme } from '../theme';
 
 const NATIVE = Platform.OS !== 'web';
 
-/** 小屋の絵の基準サイズ。実寸はこの比率で伸び縮みする */
+/** 絵の基準サイズ。実寸はこの比率で伸び縮みする */
 const W = 320;
-const H = 210;
-/** 止まり木の高さと、その左右の余白 */
-const BOARD_Y = 168;
-const BOARD_INSET = 34;
+const H = 300;
+
+/** 巣箱は 5 列 2 段の 10 個 */
+const COLS = 5;
+const ROWS = 2;
+const BODY_X = 26;
+const BODY_W = W - BODY_X * 2;
+const NEST_W = 40;
+const NEST_H = 44;
+const NEST_MARGIN = 12;
+const NEST_GAP =
+  (BODY_W - NEST_MARGIN * 2 - NEST_W * COLS) / (COLS - 1);
+const ROW_TOP = [96, 176];
+/** 各段の止まり板の上端 */
+const LEDGE_Y = [ROW_TOP[0] + NEST_H, ROW_TOP[1] + NEST_H];
+const LEDGE_H = 8;
+
+const nestX = (col: number) =>
+  BODY_X + NEST_MARGIN + col * (NEST_W + NEST_GAP);
+
+/** 巣箱 10 個ぶんの立ち位置 */
+const SLOTS = Array.from({ length: COLS * ROWS }, (_, i) => {
+  const row = Math.floor(i / COLS);
+  const col = i % COLS;
+  return { x: nestX(col) + NEST_W / 2, y: LEDGE_Y[row], row, col };
+});
 
 const wood = {
   roof: '#8C5A3C',
-  roofShade: '#7A4B30',
+  roofShade: '#74462C',
   wall: '#C89A6B',
   wallShade: '#B4855A',
   plank: '#A87A50',
-  hole: '#4A3524',
-  board: '#9C6F49',
+  nest: '#5E4632',
+  ledge: '#9C6F49',
   post: '#7A4B30',
 };
 
 /** 調子ごとの、鳩の動きかた */
 const MOTION: Record<Health, { bob: number; period: number; opacity: number }> = {
-  fine: { bob: 5, period: 1500, opacity: 1 },
-  hungry: { bob: 3, period: 2300, opacity: 0.9 },
-  weak: { bob: 1.5, period: 3400, opacity: 0.6 },
-  dead: { bob: 0, period: 4000, opacity: 0.3 },
+  fine: { bob: 4, period: 1600, opacity: 1 },
+  hungry: { bob: 2.5, period: 2400, opacity: 0.92 },
+  weak: { bob: 1, period: 3600, opacity: 0.7 },
+  dead: { bob: 0, period: 4000, opacity: 0.35 },
 };
 
 export function Loft({
   pigeons,
   flying,
-  letters,
   now,
   onSelect,
 }: {
-  /** 止まり木にいる鳩 */
+  /** 巣箱にいる鳩 */
   pigeons: Pigeon[];
   /** 空を飛んでいる鳩 */
   flying: Pigeon[];
-  letters: Letter[];
   now: number;
   onSelect: (pigeon: Pigeon) => void;
 }) {
-  // 止まり木の上に等間隔で並べる
-  const slots = useMemo(() => {
-    const n = pigeons.length;
-    if (n === 0) return [];
-    const usable = W - BOARD_INSET * 2;
-    return pigeons.map((_, i) => BOARD_INSET + (usable * (i + 0.5)) / n);
-  }, [pigeons]);
+  const housed = useMemo(
+    () => pigeons.slice(0, LOFT_CAPACITY),
+    [pigeons]
+  );
 
   return (
     <View style={styles.wrap}>
       <View style={styles.scene}>
         <Svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%">
-          {/* 空 */}
-          <Rect x="0" y="0" width={W} height={H} fill="none" />
-
           {/* 屋根 */}
+          <Path d={`M ${W / 2} 8 L ${W - 14} 66 L 14 66 Z`} fill={wood.roof} />
           <Path
-            d={`M ${W / 2} 14 L ${W - 26} 74 L 26 74 Z`}
-            fill={wood.roof}
-          />
-          <Path
-            d={`M ${W / 2} 14 L ${W - 26} 74 L ${W / 2} 74 Z`}
+            d={`M ${W / 2} 8 L ${W - 14} 66 L ${W / 2} 66 Z`}
             fill={wood.roofShade}
           />
-          {/* 屋根のふち */}
-          <Rect x="20" y="72" width={W - 40} height="8" rx="3" fill={wood.roofShade} />
+          <Rect x="8" y="64" width={W - 16} height="9" rx="4" fill={wood.roofShade} />
+          {/* 妻壁の通気口 */}
+          <Ellipse cx={W / 2} cy="46" rx="9" ry="7" fill={wood.nest} opacity={0.75} />
 
           {/* 壁 */}
-          <Rect x="44" y="78" width={W - 88} height="86" rx="4" fill={wood.wall} />
-          {/* 板の継ぎ目 */}
-          {[0, 1, 2, 3].map((i) => (
+          <Rect x={BODY_X} y="72" width={BODY_W} height="176" rx="5" fill={wood.wall} />
+          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
             <Rect
               key={i}
-              x="44"
-              y={92 + i * 20}
-              width={W - 88}
+              x={BODY_X}
+              y={82 + i * 21}
+              width={BODY_W}
               height="1.5"
               fill={wood.plank}
-              opacity={0.55}
+              opacity={0.5}
             />
           ))}
-          <Rect x={W - 62} y="78" width="18" height="86" fill={wood.wallShade} opacity={0.5} />
+          <Rect
+            x={W - BODY_X - 16}
+            y="72"
+            width="16"
+            height="176"
+            fill={wood.wallShade}
+            opacity={0.45}
+          />
 
-          {/* 出入り口。鳩はここから小屋に入る */}
-          {[0, 1, 2].map((i) => {
-            const x = 74 + i * 58;
+          {/* 巣箱 10 個 */}
+          {SLOTS.map((slot, i) => {
+            const x = nestX(slot.col);
+            const y = ROW_TOP[slot.row];
+            const r = NEST_W / 2;
             return (
               <G key={i}>
                 <Path
-                  d={`M ${x} 138 L ${x} 112 A 15 15 0 0 1 ${x + 30} 112 L ${x + 30} 138 Z`}
-                  fill={wood.hole}
+                  d={`M ${x} ${y + NEST_H} L ${x} ${y + r} A ${r} ${r} 0 0 1 ${
+                    x + NEST_W
+                  } ${y + r} L ${x + NEST_W} ${y + NEST_H} Z`}
+                  fill={wood.nest}
                 />
-                <Ellipse cx={x + 15} cy="120" rx="9" ry="7" fill="#000" opacity={0.25} />
+                {/* 奥行き */}
+                <Path
+                  d={`M ${x + 5} ${y + NEST_H} L ${x + 5} ${y + r} A ${r - 5} ${
+                    r - 5
+                  } 0 0 1 ${x + NEST_W - 5} ${y + r} L ${x + NEST_W - 5} ${
+                    y + NEST_H
+                  } Z`}
+                  fill="#382719"
+                  opacity={0.5}
+                />
               </G>
             );
           })}
 
-          {/* 止まり木 */}
-          <Rect
-            x={BOARD_INSET - 6}
-            y={BOARD_Y}
-            width={W - (BOARD_INSET - 6) * 2}
-            height="9"
-            rx="4"
-            fill={wood.board}
-          />
+          {/* 各段の止まり板 */}
+          {LEDGE_Y.map((y, i) => (
+            <Rect
+              key={i}
+              x={BODY_X - 8}
+              y={y}
+              width={BODY_W + 16}
+              height={LEDGE_H}
+              rx="3"
+              fill={wood.ledge}
+            />
+          ))}
+
           {/* 支柱 */}
-          <Rect x={W / 2 - 7} y={BOARD_Y + 9} width="14" height="28" fill={wood.post} />
-          <Rect x={W / 2 - 26} y={H - 12} width="52" height="9" rx="4" fill={wood.post} />
+          <Rect x={W / 2 - 8} y="248" width="16" height="40" fill={wood.post} />
+          <Rect x={W / 2 - 30} y="286" width="60" height="10" rx="4" fill={wood.post} />
         </Svg>
 
         {/* 空を横切る鳩 */}
@@ -132,44 +168,43 @@ export function Loft({
           <FlyingBird key={pigeon.id} pigeon={pigeon} index={i} />
         ))}
 
-        {/* 止まり木の鳩 */}
-        {pigeons.map((pigeon, i) => (
+        {/* 巣箱の前に立つ鳩 */}
+        {housed.map((pigeon, i) => (
           <PerchedBird
             key={pigeon.id}
             pigeon={pigeon}
             now={now}
-            leftPercent={(slots[i] / W) * 100}
-            showName={pigeons.length <= 4}
+            slot={SLOTS[i]}
             onPress={() => onSelect(pigeon)}
           />
         ))}
       </View>
 
-      {pigeons.length === 0 && flying.length === 0 && (
-        <Text style={styles.empty}>小屋は空っぽです</Text>
-      )}
+      <Text style={styles.count}>
+        巣箱 {housed.length} / {LOFT_CAPACITY}
+      </Text>
     </View>
   );
 }
 
-/** 止まり木の上でゆれている鳩。調子が悪いほど動かない */
+/** 止まり板の上でゆれている鳩。調子が悪いほど動かない */
 function PerchedBird({
   pigeon,
   now,
-  leftPercent,
-  showName,
+  slot,
   onPress,
 }: {
   pigeon: Pigeon;
   now: number;
-  leftPercent: number;
-  showName: boolean;
+  slot: { x: number; y: number; col: number };
   onPress: () => void;
 }) {
   const health = healthOf(pigeon, now);
   const motion = MOTION[health];
   const bob = useRef(new Animated.Value(0)).current;
   const hop = useRef(new Animated.Value(0)).current;
+  // 端の鳩は内側を向く
+  const flip = slot.col >= COLS / 2;
 
   useEffect(() => {
     bob.setValue(0);
@@ -201,26 +236,27 @@ function PerchedBird({
   useEffect(() => {
     if (health !== 'fine') return;
     let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
     const jump = () => {
       if (!alive) return;
       Animated.sequence([
         Animated.timing(hop, {
           toValue: 1,
-          duration: 180,
+          duration: 170,
           easing: Easing.out(Easing.quad),
           useNativeDriver: NATIVE,
         }),
         Animated.timing(hop, {
           toValue: 0,
-          duration: 220,
+          duration: 230,
           easing: Easing.bounce,
           useNativeDriver: NATIVE,
         }),
       ]).start(() => {
-        timer = setTimeout(jump, 3000 + Math.random() * 7000);
+        timer = setTimeout(jump, 3500 + Math.random() * 8000);
       });
     };
-    let timer = setTimeout(jump, 2000 + Math.random() * 6000);
+    timer = setTimeout(jump, 2000 + Math.random() * 7000);
     return () => {
       alive = false;
       clearTimeout(timer);
@@ -229,60 +265,87 @@ function PerchedBird({
 
   const translateY = Animated.add(
     bob.interpolate({ inputRange: [0, 1], outputRange: [0, -motion.bob] }),
-    hop.interpolate({ inputRange: [0, 1], outputRange: [0, -14] })
+    hop.interpolate({ inputRange: [0, 1], outputRange: [0, -12] })
   );
 
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.perch, { left: `${leftPercent}%` }]}
-      accessibilityLabel={`${pigeon.name}`}
+      accessibilityLabel={pigeon.name}
+      style={[
+        styles.perch,
+        {
+          left: `${(slot.x / W) * 100}%`,
+          // 足が板の上にくる高さ
+          top: `${((slot.y - 27) / H) * 100}%`,
+        },
+      ]}
     >
       <Animated.View
         style={{
-          transform: [{ translateY }, { rotate: health === 'weak' ? '8deg' : '0deg' }],
+          transform: [
+            { translateY },
+            { rotate: health === 'weak' ? '9deg' : '0deg' },
+          ],
           opacity: motion.opacity,
         }}
       >
-        <Text style={styles.bird}>{pigeon.emoji}</Text>
+        <PigeonMark variant={pigeon.variant} size={34} flip={flip} />
       </Animated.View>
-      {showName && (
-        <Text style={styles.tag} numberOfLines={1}>
-          {pigeon.name}
-        </Text>
-      )}
     </Pressable>
   );
 }
 
-/** 空を横切っていく鳩 */
+/** 空を横切っていく鳩。翼を上下に打つ */
 function FlyingBird({ pigeon, index }: { pigeon: Pigeon; index: number }) {
   const cross = useRef(new Animated.Value(0)).current;
+  const flap = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     cross.setValue(0);
     const loop = Animated.loop(
       Animated.timing(cross, {
         toValue: 1,
-        duration: 11000,
+        duration: 12000,
         easing: Easing.linear,
         useNativeDriver: NATIVE,
       })
     );
-    const delay = setTimeout(() => loop.start(), index * 2600);
+    const delay = setTimeout(() => loop.start(), index * 2800);
     return () => {
       clearTimeout(delay);
       loop.stop();
     };
   }, [cross, index]);
 
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(flap, {
+          toValue: 1,
+          duration: 190,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: NATIVE,
+        }),
+        Animated.timing(flap, {
+          toValue: 0,
+          duration: 190,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: NATIVE,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [flap]);
+
   const translateX = cross.interpolate({
     inputRange: [0, 1],
-    outputRange: [-40, 360],
+    outputRange: [-44, W + 20],
   });
   const translateY = cross.interpolate({
     inputRange: [0, 0.25, 0.5, 0.75, 1],
-    outputRange: [0, -8, 2, -6, 0],
+    outputRange: [0, -9, 3, -7, 0],
   });
 
   return (
@@ -290,42 +353,39 @@ function FlyingBird({ pigeon, index }: { pigeon: Pigeon; index: number }) {
       pointerEvents="none"
       style={[
         styles.flyer,
-        { top: 8 + (index % 2) * 22, transform: [{ translateX }, { translateY }] },
+        { top: 4 + (index % 3) * 18, transform: [{ translateX }, { translateY }] },
       ]}
     >
-      <Text style={styles.flyerBird}>{pigeon.emoji}</Text>
+      <Animated.View style={{ opacity: flap }}>
+        <PigeonFlyer variant={pigeon.variant} size={30} wingsUp />
+      </Animated.View>
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          { opacity: flap.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) },
+        ]}
+      >
+        <PigeonFlyer variant={pigeon.variant} size={30} wingsUp={false} />
+      </Animated.View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginBottom: 18 },
-  scene: {
-    width: '100%',
-    aspectRatio: W / H,
-    position: 'relative',
-  },
+  wrap: { marginBottom: 16 },
+  scene: { width: '100%', aspectRatio: W / H, position: 'relative' },
   perch: {
     position: 'absolute',
-    // 止まり木の板の上に立たせる
-    top: `${((BOARD_Y - 29) / H) * 100}%`,
-    width: 46,
-    marginLeft: -23,
+    width: 40,
+    marginLeft: -20,
     alignItems: 'center',
   },
-  bird: { fontSize: 24 },
-  tag: {
-    fontSize: 10,
-    color: theme.inkSoft,
-    marginTop: 20,
-    maxWidth: 60,
-  },
-  flyer: { position: 'absolute', left: 0 },
-  flyerBird: { fontSize: 16, opacity: 0.8 },
-  empty: {
+  flyer: { position: 'absolute', left: 0, width: 30, height: 24 },
+  count: {
     textAlign: 'center',
     color: theme.inkFaint,
-    fontSize: 13,
-    marginTop: -8,
+    fontSize: 12,
+    marginTop: 8,
+    letterSpacing: 1,
   },
 });

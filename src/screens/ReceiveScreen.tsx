@@ -100,12 +100,12 @@ export function ReceiveScreen({
 
 /** 何かが起きたことを一言で伝える */
 export function Notice({
-  emoji,
+  mark,
   title,
   detail,
   onClose,
 }: {
-  emoji: string;
+  mark: React.ReactNode;
   title: string;
   detail: string;
   onClose: () => void;
@@ -114,7 +114,7 @@ export function Notice({
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={styles.notice}>
-          <Text style={styles.noticeEmoji}>{emoji}</Text>
+          <View style={styles.noticeMark}>{mark}</View>
           <Text style={styles.noticeTitle}>{title}</Text>
           <Muted style={{ textAlign: 'center', marginTop: 8 }}>{detail}</Muted>
           <Button label="わかった" onPress={onClose} style={{ marginTop: 22 }} />
@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
-  noticeEmoji: { fontSize: 40, marginBottom: 10 },
+  noticeMark: { marginBottom: 10 },
   noticeTitle: {
     fontSize: 17,
     fontWeight: '600',

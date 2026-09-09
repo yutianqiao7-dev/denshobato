@@ -20,10 +20,13 @@ import {
   CARE,
   healthOf,
   letterStatus,
+  LOFT_CAPACITY,
+  pigeonsInMyCare,
   releasablePigeons,
   RISK_BY_HEALTH,
   SPEED_BY_HEALTH,
 } from './flock';
+import { PLUMAGES } from './pigeonArt';
 import { PIGEON_EMOJI, PIGEON_NAMES, RING_COLORS } from './cities';
 import { cancelArrival, scheduleArrival } from './notify';
 import { codeKind, decodeLetter, decodePigeon } from './pigeonCode';
@@ -51,9 +54,15 @@ type Store = {
   takeInPigeon: (
     name?: string,
     seed?: { ownerName?: string; loft?: Place }
-  ) => Pigeon;
+  ) => Pigeon | null;
+  /** 巣箱の空き数 */
+  nestsFree: number;
   /** 相手の鳩を預かったことにする（手渡しの記録） */
-  borrowPigeon: (contactId: string, name: string, emoji?: string) => Pigeon | null;
+  borrowPigeon: (
+    contactId: string,
+    name: string,
+    variant?: string
+  ) => Pigeon | null;
   /** 自分の鳩を誰かに預ける */
   givePigeon: (pigeonId: string, contactId: string) => void;
   /** 世話をする */
@@ -73,6 +82,11 @@ type Store = {
     pigeon: Pigeon
   ) => { km: number; ms: number; loss: number } | null;
 };
+
+/** 巣箱の空き。手元にいる鳩だけが箱をふさぐ */
+function freeNests(state: AppState, now: number): number {
+  return LOFT_CAPACITY - pigeonsInMyCare(state.pigeons, state.letters, now).length;
+}
 
 const StoreContext = createContext<Store | null>(null);
 
@@ -182,13 +196,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     seed?: { ownerName?: string; loft?: Place }
   ) => {
     const s = stateRef.current;
+    const now = Date.now();
+    if (freeNests(s, now) <= 0) return null;
     const taken = s.pigeons.map((p) => p.name);
     const fresh = PIGEON_NAMES.filter((n) => !taken.includes(n));
-    const now = Date.now();
     const pigeon: Pigeon = {
       id: newId(),
       name: name?.trim() || pick(fresh.length > 0 ? fresh : PIGEON_NAMES),
       emoji: pick(PIGEON_EMOJI),
+      variant: pick(PLUMAGES).id,
       takenInAt: now,
       mine: true,
       ownerName: seed?.ownerName ?? s.myName,
@@ -210,15 +226,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [scheduleCare]);
 
   const borrowPigeon = useCallback(
-    (contactId: string, name: string, emoji?: string) => {
+    (contactId: string, name: string, variant?: string) => {
       const s = stateRef.current;
       const contact = s.contacts.find((c) => c.id === contactId);
-      if (!contact) return null;
       const now = Date.now();
+      if (!contact || freeNests(s, now) <= 0) return null;
       const pigeon: Pigeon = {
         id: newId(),
         name: name.trim() || '名のない鳩',
-        emoji: emoji || pick(PIGEON_EMOJI),
+        emoji: pick(PIGEON_EMOJI),
+        variant: variant || pick(PLUMAGES).id,
         takenInAt: now,
         mine: false,
         ownerName: contact.name,
@@ -366,6 +383,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         pigeonId: pigeon.id,
         pigeonName: pigeon.name,
         pigeonEmoji: pigeon.emoji,
+        pigeonVariant: pigeon.variant,
         from: s.home,
         to: pigeon.loft,
         body,
@@ -422,6 +440,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
         if (s.pigeons.some((p) => p.id === pigeon.id)) {
           return { ok: false, reason: 'この鳩はもう預かっています。' };
+        }
+        if (freeNests(s, now) <= 0) {
+          return {
+            ok: false,
+            reason: `鳩舎の巣箱は${LOFT_CAPACITY}個です。空きがありません。`,
+          };
         }
         setState((prev) => ({ ...prev, pigeons: [...prev.pigeons, pigeon] }));
         return { ok: true, kind: 'pigeon', pigeon };
@@ -512,6 +536,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setSpeed,
       setNotify,
       previewFlight,
+      nestsFree: freeNests(state, Date.now()),
     }),
     [
       state,

@@ -8,6 +8,7 @@ import {
   progressOf,
 } from '../geo';
 import { lastSeenAt, letterStatus } from '../flock';
+import { variantFor } from '../pigeonArt';
 import { theme } from '../theme';
 import { Card } from './ui';
 import { PigeonProgress } from './PigeonProgress';
@@ -22,6 +23,7 @@ export function LetterCard({
   onPress: () => void;
 }) {
   const status = letterStatus(letter, now);
+  const variant = letter.pigeonVariant ?? variantFor(letter.pigeonId);
   const outbound = letter.direction === 'outbound';
   const heading = outbound ? `${letter.peerName} へ` : `${letter.peerName} から`;
 
@@ -43,7 +45,7 @@ export function LetterCard({
         <>
           <PigeonProgress
             progress={progressOf(letter, now)}
-            emoji={letter.pigeonEmoji}
+            variant={variant}
             ring={letter.ring}
             fromName={letter.from.name}
             toName={letter.to.name}
@@ -65,7 +67,7 @@ export function LetterCard({
               letter,
               lastSeenAt(letter, now)
             )}
-            emoji={letter.pigeonEmoji}
+            variant={variant}
             ring={letter.ring}
             fromName={letter.from.name}
             toName={letter.to.name}

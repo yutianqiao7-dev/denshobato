@@ -1,4 +1,5 @@
 import { Letter, Pigeon, Place } from './types';
+import { variantFor } from './pigeonArt';
 
 /**
  * 手渡しの代わりになる文字列。サーバーを介さずに
@@ -133,6 +134,7 @@ type PigeonPayload = {
   id: string;
   name: string;
   emoji: string;
+  variant?: string;
   owner: string;
   loft: Place;
 };
@@ -144,6 +146,7 @@ export function encodePigeon(pigeon: Pigeon, ownerName: string): string {
     id: pigeon.id,
     name: pigeon.name,
     emoji: pigeon.emoji,
+    variant: pigeon.variant,
     owner: ownerName || '名もなき飼い主',
     loft: pigeon.loft,
   };
@@ -158,6 +161,7 @@ export function decodePigeon(code: string, now: number): Pigeon | null {
     id: payload.id,
     name: payload.name || '名のない鳩',
     emoji: payload.emoji || '🕊️',
+    variant: payload.variant || variantFor(payload.id),
     takenInAt: now,
     mine: false,
     ownerName: payload.owner || '名もなき飼い主',
@@ -179,6 +183,7 @@ type LetterPayload = {
   pid: string;
   pname: string;
   pemoji: string;
+  pvar?: string;
   body: string;
   sentAt: number;
   arrivesAt: number;
@@ -201,6 +206,7 @@ export function encodeLetter(letter: Letter, senderName: string): string {
     pid: letter.pigeonId,
     pname: letter.pigeonName,
     pemoji: letter.pigeonEmoji,
+    pvar: letter.pigeonVariant,
     body: letter.body,
     sentAt: letter.sentAt,
     arrivesAt: letter.arrivesAt,
@@ -226,6 +232,7 @@ export function decodeLetter(code: string): Letter | null {
     pigeonId: payload.pid || 'unknown',
     pigeonName: payload.pname || '名のない鳩',
     pigeonEmoji: payload.pemoji || '🕊️',
+    pigeonVariant: payload.pvar || variantFor(payload.pid || payload.id),
     from: payload.from,
     to: payload.to,
     body: payload.body,

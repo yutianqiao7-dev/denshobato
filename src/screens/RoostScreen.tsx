@@ -11,17 +11,19 @@ import {
 } from 'react-native';
 import { useStore } from '../store';
 import { Pigeon } from '../types';
-import { PIGEON_EMOJI } from '../cities';
+
 import { formatDateTime, formatDistance, formatDuration, distanceKm } from '../geo';
 import {
   healthOf,
   HEALTH_LABEL,
   letterStatus,
+  LOFT_CAPACITY,
   pigeonStatus,
   pigeonTrips,
   starvesAt,
   STATUS_LABEL,
 } from '../flock';
+import { PigeonMark, PLUMAGES } from '../pigeonArt';
 import { useNow } from '../useNow';
 import { radius, theme } from '../theme';
 import { Button, Card, Empty, Muted, SectionTitle } from '../components/ui';
@@ -36,7 +38,8 @@ export function RoostScreen({
   onWrite: (pigeonId: string) => void;
   onReceive: () => void;
 }) {
-  const { state, takeInPigeon, feedPigeon, feedAll, removePigeon } = useStore();
+  const { state, takeInPigeon, feedPigeon, feedAll, removePigeon, nestsFree } =
+    useStore();
   const now = useNow(15000);
   const [giving, setGiving] = useState<Pigeon | null>(null);
   const [borrowing, setBorrowing] = useState(false);
@@ -69,12 +72,12 @@ export function RoostScreen({
           ? `${groups.here.length}羽が手元にいます`
           : '手元に鳩がいません'}
         {needsCare > 0 ? `・${needsCare}羽が世話を待っています` : ''}
+        {nestsFree <= 0 ? '・巣箱に空きがありません' : ''}
       </Text>
 
       <Loft
         pigeons={groups.here}
         flying={groups.flying}
-        letters={state.letters}
         now={now}
         onSelect={setActing}
       />
@@ -111,17 +114,24 @@ export function RoostScreen({
         <Button
           label="新しい鳩を迎える"
           tone="quiet"
+          disabled={nestsFree <= 0}
           onPress={() => takeInPigeon()}
           style={{ flex: 1 }}
         />
         <Button
           label="鳩を預かる"
           tone="quiet"
+          disabled={nestsFree <= 0}
           onPress={() => setBorrowing(true)}
           style={{ flex: 1 }}
         />
       </View>
       <Muted style={{ marginTop: 10 }}>
+        {nestsFree > 0
+          ? `巣箱は${LOFT_CAPACITY}個。あと${nestsFree}羽まで置けます。`
+          : `巣箱は${LOFT_CAPACITY}個で埋まっています。誰かに渡すか、放つと空きます。`}
+      </Muted>
+      <Muted style={{ marginTop: 8 }}>
         鳩は自分の鳩舎にしか帰れません。だから手紙を送るには、相手の鳩を預かって、
         それを放ちます。自分の鳩は相手に渡しておけば、いつか手紙を持って帰ってきます。
       </Muted>
@@ -132,7 +142,9 @@ export function RoostScreen({
           {groups.lent.map((p) => (
             <Card key={p.id}>
               <View style={styles.row}>
-                <Text style={styles.emoji}>{p.emoji}</Text>
+                <View style={styles.mark}>
+                  <PigeonMark variant={p.variant} size={30} />
+                </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{p.name}</Text>
                   <Muted>
@@ -162,7 +174,9 @@ export function RoostScreen({
             return (
               <Card key={p.id}>
                 <View style={styles.row}>
-                  <Text style={styles.emoji}>{p.emoji}</Text>
+                  <View style={styles.mark}>
+                    <PigeonMark variant={p.variant} size={30} />
+                  </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.name}>{p.name}</Text>
                     <Muted>
@@ -188,7 +202,9 @@ export function RoostScreen({
             return (
               <Card key={p.id} style={styles.goneCard}>
                 <View style={styles.row}>
-                  <Text style={[styles.emoji, styles.faded]}>{p.emoji}</Text>
+                  <View style={[styles.mark, styles.faded]}>
+                    <PigeonMark variant={p.variant} size={30} />
+                  </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.name}>{p.name}</Text>
                     <Muted>
@@ -277,7 +293,9 @@ function HerePigeon({
   return (
     <Card style={health === 'weak' ? styles.weakCard : undefined}>
       <View style={styles.row}>
-        <Text style={styles.emoji}>{pigeon.emoji}</Text>
+        <View style={styles.mark}>
+          <PigeonMark variant={pigeon.variant} size={30} />
+        </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>{pigeon.name}</Text>
           <Muted>
@@ -343,7 +361,7 @@ function PigeonActions({
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
-          <Text style={styles.sheetEmoji}>{pigeon.emoji}</Text>
+          <PigeonMark variant={pigeon.variant} size={62} />
           <Text style={styles.sheetName}>{pigeon.name}</Text>
           <Muted style={{ textAlign: 'center', marginTop: 4 }}>
             {pigeon.mine
@@ -492,13 +510,13 @@ function BorrowPigeon({
   const { state, borrowPigeon } = useStore();
   const [contactId, setContactId] = useState<string | null>(null);
   const [name, setName] = useState('');
-  const [emoji, setEmoji] = useState(PIGEON_EMOJI[0]);
+  const [variant, setVariant] = useState(PLUMAGES[0].id);
 
   const contact = state.contacts.find((c) => c.id === contactId);
 
   const submit = () => {
     if (!contactId) return;
-    borrowPigeon(contactId, name, emoji);
+    borrowPigeon(contactId, name, variant);
     setContactId(null);
     setName('');
     onClose();
@@ -568,15 +586,15 @@ function BorrowPigeon({
             maxLength={12}
           />
 
-          <Text style={styles.label}>見た目</Text>
+          <Text style={styles.label}>羽の色</Text>
           <View style={styles.chips}>
-            {PIGEON_EMOJI.map((e) => (
+            {PLUMAGES.map((p) => (
               <Pressable
-                key={e}
-                onPress={() => setEmoji(e)}
-                style={[styles.chip, emoji === e && styles.chipOn]}
+                key={p.id}
+                onPress={() => setVariant(p.id)}
+                style={[styles.plumage, variant === p.id && styles.chipOn]}
               >
-                <Text style={{ fontSize: 20 }}>{e}</Text>
+                <PigeonMark variant={p.id} size={34} />
               </Pressable>
             ))}
           </View>
@@ -599,7 +617,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, fontWeight: '700', color: theme.ink, letterSpacing: 4 },
   sub: { color: theme.inkFaint, fontSize: 13, marginTop: 6, marginBottom: 18 },
   row: { flexDirection: 'row', alignItems: 'center' },
-  emoji: { fontSize: 24, marginRight: 12 },
+  mark: { width: 34, marginRight: 12, alignItems: 'center' },
   faded: { opacity: 0.35 },
   name: { fontSize: 16, color: theme.ink, fontWeight: '600' },
   health: { fontSize: 13, marginTop: 12 },
@@ -639,6 +657,14 @@ const styles = StyleSheet.create({
   chipText: { color: theme.ink, fontSize: 15 },
   chipPlace: { color: theme.inkFaint, fontSize: 11, marginTop: 2 },
   chipTextOn: { color: theme.paper },
+  plumage: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    backgroundColor: theme.card,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: theme.line,
+  },
   header: {
     paddingTop: 60,
     paddingHorizontal: 20,
@@ -671,7 +697,6 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
-  sheetEmoji: { fontSize: 40 },
   sheetName: {
     fontSize: 19,
     fontWeight: '700',
