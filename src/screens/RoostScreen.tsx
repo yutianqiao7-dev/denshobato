@@ -28,6 +28,8 @@ import { useNow } from '../useNow';
 import { radius, theme } from '../theme';
 import { Button, Card, Empty, Muted, SectionTitle } from '../components/ui';
 import { Loft } from '../components/Loft';
+import { QrView } from '../components/QrView';
+import { flyAway } from '../flyaway';
 import { encodePigeon } from '../pigeonCode';
 import { confirmDestructive } from '../confirm';
 
@@ -38,7 +40,7 @@ export function RoostScreen({
   onWrite: (pigeonId: string) => void;
   onReceive: () => void;
 }) {
-  const { state, takeInPigeon, feedPigeon, feedAll, removePigeon, nestsFree } =
+  const { state, takeInPigeon, feedPigeon, removePigeon, nestsFree } =
     useStore();
   const now = useNow(15000);
   const [giving, setGiving] = useState<Pigeon | null>(null);
@@ -80,15 +82,8 @@ export function RoostScreen({
         flying={groups.flying}
         now={now}
         onSelect={setActing}
+        onFeed={(p) => feedPigeon(p.id)}
       />
-
-      {needsCare > 0 && (
-        <Button
-          label="みんなに世話をする"
-          onPress={feedAll}
-          style={{ marginBottom: 16 }}
-        />
-      )}
 
       <SectionTitle>手元の鳩</SectionTitle>
       {groups.here.length === 0 ? (
@@ -103,7 +98,6 @@ export function RoostScreen({
             pigeon={p}
             now={now}
             homeName={state.home?.name}
-            onFeed={() => feedPigeon(p.id)}
             onGive={() => setGiving(p)}
             onWrite={() => onWrite(p.id)}
           />
@@ -248,10 +242,6 @@ export function RoostScreen({
         pigeon={acting}
         now={now}
         onClose={() => setActing(null)}
-        onFeed={() => {
-          if (acting) feedPigeon(acting.id);
-          setActing(null);
-        }}
         onGive={() => {
           const target = acting;
           setActing(null);
@@ -276,14 +266,12 @@ function HerePigeon({
   pigeon,
   now,
   homeName,
-  onFeed,
   onGive,
   onWrite,
 }: {
   pigeon: Pigeon;
   now: number;
   homeName?: string;
-  onFeed: () => void;
   onGive: () => void;
   onWrite: () => void;
 }) {
@@ -321,7 +309,6 @@ function HerePigeon({
       </Text>
 
       <View style={styles.actions}>
-        <Button label="世話をする" tone="quiet" onPress={onFeed} style={{ flex: 1 }} />
         {pigeon.mine ? (
           <Button label="誰かに渡す" tone="quiet" onPress={onGive} style={{ flex: 1 }} />
         ) : (
@@ -342,14 +329,12 @@ function PigeonActions({
   pigeon,
   now,
   onClose,
-  onFeed,
   onGive,
   onWrite,
 }: {
   pigeon: Pigeon | null;
   now: number;
   onClose: () => void;
-  onFeed: () => void;
   onGive: () => void;
   onWrite: () => void;
 }) {
@@ -382,15 +367,9 @@ function PigeonActions({
           </Text>
 
           <Button
-            label="世話をする"
-            onPress={onFeed}
-            style={{ marginTop: 20, alignSelf: 'stretch' }}
-          />
-          <Button
             label={pigeon.mine ? '誰かに渡す' : '手紙を持たせる'}
-            tone="quiet"
             onPress={pigeon.mine ? onGive : onWrite}
-            style={{ marginTop: 10, alignSelf: 'stretch' }}
+            style={{ marginTop: 20, alignSelf: 'stretch' }}
           />
           <Button
             label="閉じる"
@@ -420,8 +399,10 @@ function GivePigeon({
   const alreadyLent = pigeon.custody.kind === 'lent';
 
   const give = (contactId: string) => {
+    const handed = encodePigeon(pigeon, state.myName);
     givePigeon(pigeon.id, contactId);
-    setCode(encodePigeon(pigeon, state.myName));
+    // 手放したことが見えるように、いったん飛ばしてからコードを出す
+    flyAway(pigeon.variant, () => setCode(handed));
   };
 
   const close = () => {
@@ -475,9 +456,10 @@ function GivePigeon({
                 {pigeon.name}を手渡してください
               </Text>
               <Muted style={{ marginBottom: 16 }}>
-                この鳩コードを相手に送ると、相手のアプリに{pigeon.name}が移ります。
-                実際に会って渡すつもりで。
+                相手に「コードを受け取る」を開いてもらって、この QR
+                をカメラで読んでもらってください。離れているなら、下のボタンで文字のまま送れます。
               </Muted>
+              <QrView value={shown} />
               <Button
                 label="鳩コードを送る"
                 onPress={() =>

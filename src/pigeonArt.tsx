@@ -121,18 +121,21 @@ export type Pose =
  */
 export function PigeonMark({
   variant,
-  size = 44,
+  size,
   flip = false,
   pose = 'stand',
 }: {
   variant?: string;
+  /** 省略すると親の大きさいっぱいに描く */
   size?: number;
   flip?: boolean;
   pose?: Pose;
 }) {
   const p = plumage(variant);
+  const w = size === undefined ? '100%' : size;
+  const h = size === undefined ? '100%' : (size * 40) / 48;
   return (
-    <Svg width={size} height={(size * 40) / 48} viewBox="0 0 48 40">
+    <Svg width={w} height={h} viewBox="0 0 48 40">
       <G transform={flip ? 'translate(48,0) scale(-1,1)' : undefined}>
         {pose === 'fluff' ? <Fluffed p={p} /> : <Upright p={p} pose={pose} />}
       </G>
@@ -258,18 +261,21 @@ function Fluffed({ p }: { p: Plumage }) {
 /** 飛んでいる鳩。翼を上げた形と下げた形を切り替えて羽ばたかせる */
 export function PigeonFlyer({
   variant,
-  size = 34,
+  size,
   wingsUp = true,
   flip = false,
 }: {
   variant?: string;
+  /** 省略すると親の大きさいっぱいに描く */
   size?: number;
   wingsUp?: boolean;
   flip?: boolean;
 }) {
   const p = plumage(variant);
+  const w = size === undefined ? '100%' : size;
+  const h = size === undefined ? '100%' : (size * 30) / 48;
   return (
-    <Svg width={size} height={(size * 30) / 48} viewBox="0 0 48 30">
+    <Svg width={w} height={h} viewBox="0 0 48 30">
       <G transform={flip ? 'translate(48,0) scale(-1,1)' : undefined}>
         {/* 尾 */}
         <Path d="M 12 15 L 1 12.6 L 1.4 19 L 12.6 18.6 Z" fill={p.wing} />

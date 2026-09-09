@@ -13,6 +13,7 @@ import {
 import { useStore, ReceiveResult } from '../store';
 import { radius, theme } from '../theme';
 import { Button, Muted } from '../components/ui';
+import { QrScanner } from '../components/QrScanner';
 
 export type Received = Extract<ReceiveResult, { ok: true }>;
 
@@ -29,25 +30,31 @@ export function ReceiveScreen({
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [scanning, setScanning] = useState(true);
 
   const close = () => {
     setCode('');
     setError('');
+    setScanning(true);
     onClose();
   };
 
-  const receive = async () => {
+  const accept = async (value: string) => {
     setBusy(true);
-    const result = await receiveCode(code);
+    const result = await receiveCode(value);
     setBusy(false);
     if (!result.ok) {
       setError(result.reason);
+      setScanning(false);
       return;
     }
     setCode('');
     setError('');
+    setScanning(true);
     onReceived(result);
   };
+
+  const receive = () => accept(code);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={close}>
@@ -66,31 +73,56 @@ export function ReceiveScreen({
           keyboardShouldPersistTaps="handled"
         >
           <Muted style={{ marginBottom: 16 }}>
-            相手から届いた文字列を、そのまま貼り付けてください。{'\n'}
-            ・鳩コード … 相手の鳩を預かります。世話はあなたの仕事になります{'\n'}
-            ・手紙コード … あなたの鳩が手紙を持って帰ってきます
+            相手の画面に出ている QR を読み取ります。{'\n'}
+            ・鳩の QR … 相手の鳩を預かります。世話はあなたの仕事になります{'\n'}
+            ・手紙の QR … あなたの鳩が手紙を持って帰ってきます
           </Muted>
-          <TextInput
-            value={code}
-            onChangeText={(t) => {
-              setCode(t);
-              setError('');
-            }}
-            placeholder="DENSHOBATO1...."
-            placeholderTextColor={theme.inkFaint}
-            style={styles.input}
-            multiline
-            autoCapitalize="none"
-            autoCorrect={false}
-            textAlignVertical="top"
-          />
-          {!!error && <Text style={styles.error}>{error}</Text>}
-          <Button
-            label="受け取る"
-            onPress={receive}
-            disabled={code.trim().length === 0 || busy}
-            busy={busy}
-          />
+
+          {scanning ? (
+            <>
+              <QrScanner onRead={accept} onCancel={close} />
+              {!!error && <Text style={styles.error}>{error}</Text>}
+              <Button
+                label="QR がないので文字で入れる"
+                tone="quiet"
+                onPress={() => setScanning(false)}
+                style={{ marginTop: 16 }}
+              />
+            </>
+          ) : (
+            <>
+              <TextInput
+                value={code}
+                onChangeText={(t) => {
+                  setCode(t);
+                  setError('');
+                }}
+                placeholder="DENSHOBATO1...."
+                placeholderTextColor={theme.inkFaint}
+                style={styles.input}
+                multiline
+                autoCapitalize="none"
+                autoCorrect={false}
+                textAlignVertical="top"
+              />
+              {!!error && <Text style={styles.error}>{error}</Text>}
+              <Button
+                label="受け取る"
+                onPress={receive}
+                disabled={code.trim().length === 0 || busy}
+                busy={busy}
+              />
+              <Button
+                label="QR を読み取る"
+                tone="quiet"
+                onPress={() => {
+                  setError('');
+                  setScanning(true);
+                }}
+                style={{ marginTop: 10 }}
+              />
+            </>
+          )}
           <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>

@@ -2,13 +2,14 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
+  PanResponder,
   Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import Svg, { Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Ellipse, Path, Rect } from 'react-native-svg';
 import { Pigeon } from '../types';
 import { Health, healthOf, LOFT_CAPACITY } from '../flock';
 import { PigeonFlyer, PigeonMark, Pose } from '../pigeonArt';
@@ -16,7 +17,10 @@ import { theme } from '../theme';
 
 const NATIVE = Platform.OS !== 'web';
 
-/** 絵の基準サイズ。実寸はこの比率で伸び縮みする */
+/**
+ * 絵はすべてこの座標系で組み立てて、画面には割合で置く。
+ * 実寸を測らずに済むので、幅がいくつでも巣箱と鳩の比率が崩れない。
+ */
 const W = 320;
 
 /** 巣箱は 5 列 2 段の 10 個 */
@@ -30,6 +34,11 @@ const CELL_H = 58;
 const ROW_PITCH = CELL_H + BOARD;
 const H = PAD * 2 + BOARD * (ROWS + 1) + CELL_H * ROWS;
 
+/** 鳩の大きさ（この座標系での幅）。絵の中で足は y=36/40 の高さ */
+const BIRD_W = 54;
+const BIRD_H = (BIRD_W * 40) / 48;
+const BIRD_FEET = BIRD_H * (36 / 40);
+
 const cellX = (col: number) => PAD + BOARD + col * (CELL_W + BOARD);
 const cellY = (row: number) => PAD + BOARD + row * ROW_PITCH;
 
@@ -37,13 +46,23 @@ const cellY = (row: number) => PAD + BOARD + row * ROW_PITCH;
 const SLOTS = Array.from({ length: COLS * ROWS }, (_, i) => {
   const row = Math.floor(i / COLS);
   const col = i % COLS;
+  const centerX = cellX(col) + CELL_W / 2;
+  const floorY = cellY(row) + CELL_H;
   return {
     col,
     row,
-    centerX: cellX(col) + CELL_W / 2,
-    floorY: cellY(row) + CELL_H,
+    centerX,
+    floorY,
+    // 鳩が占める枠。餌を落とせる範囲でもある
+    left: centerX - BIRD_W / 2,
+    right: centerX + BIRD_W / 2,
+    top: floorY - BIRD_FEET,
+    bottom: floorY + 4,
   };
 });
+
+const pct = (value: number, total: number) =>
+  `${(value / total) * 100}%` as `${number}%`;
 
 /** 合板の鳩舎 */
 const wood = {
@@ -55,11 +74,13 @@ const wood = {
   floor: '#D3B183',
 };
 
+const grainColors = ['#C99A4E', '#A87B3C', '#E0BE7A', '#8E6530'];
+
 /** 調子ごとの、鳩の動きかた */
 const MOTION: Record<Health, { bob: number; period: number; opacity: number }> = {
-  fine: { bob: 3.5, period: 1700, opacity: 1 },
-  hungry: { bob: 2, period: 2500, opacity: 0.95 },
-  weak: { bob: 0.8, period: 3800, opacity: 0.8 },
+  fine: { bob: 4, period: 1700, opacity: 1 },
+  hungry: { bob: 2.5, period: 2500, opacity: 0.95 },
+  weak: { bob: 1, period: 3800, opacity: 0.8 },
   dead: { bob: 0, period: 4000, opacity: 0.4 },
 };
 
@@ -68,6 +89,7 @@ export function Loft({
   flying,
   now,
   onSelect,
+  onFeed,
 }: {
   /** 巣箱にいる鳩 */
   pigeons: Pigeon[];
@@ -75,19 +97,69 @@ export function Loft({
   flying: Pigeon[];
   now: number;
   onSelect: (pigeon: Pigeon) => void;
+  onFeed: (pigeon: Pigeon) => void;
 }) {
   const housed = useMemo(() => pigeons.slice(0, LOFT_CAPACITY), [pigeons]);
-  // 実寸を測って、鳩の大きさを巣箱に合わせる
-  const [width, setWidth] = useState(0);
-  const scale = width > 0 ? width / W : 0;
-  const birdWidth = 54 * scale;
+
+  const sceneRef = useRef<View>(null);
+  /** 掴んだ瞬間に測った、鳩舎の画面上の位置と大きさ */
+  const frame = useRef({ x: 0, y: 0, w: 0, h: 0 });
+  const [grain, setGrain] = useState<{ x: number; y: number } | null>(null);
+  const [target, setTarget] = useState<number | null>(null);
+  const [crumbs, setCrumbs] = useState<{ slot: number; key: number } | null>(
+    null
+  );
+
+  /** 画面上の座標が、どの鳩の上か */
+  const hitTest = (pageX: number, pageY: number) => {
+    const { x, y, w, h } = frame.current;
+    if (w <= 0 || h <= 0) return null;
+    const lx = ((pageX - x) / w) * W;
+    const ly = ((pageY - y) / h) * H;
+    for (let i = 0; i < housed.length; i++) {
+      const s = SLOTS[i];
+      if (lx >= s.left - 4 && lx <= s.right + 4 && ly >= s.top - 8 && ly <= s.bottom) {
+        return i;
+      }
+    }
+    return null;
+  };
+
+  const pan = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (_e, g) => {
+          sceneRef.current?.measureInWindow((x, y, w, h) => {
+            frame.current = { x, y, w, h };
+          });
+          setGrain({ x: g.x0, y: g.y0 });
+        },
+        onPanResponderMove: (_e, g) => {
+          setGrain({ x: g.moveX, y: g.moveY });
+          setTarget(hitTest(g.moveX, g.moveY));
+        },
+        onPanResponderRelease: (_e, g) => {
+          const hit = hitTest(g.moveX, g.moveY);
+          setGrain(null);
+          setTarget(null);
+          if (hit !== null && housed[hit]) {
+            onFeed(housed[hit]);
+            setCrumbs({ slot: hit, key: Date.now() });
+          }
+        },
+        onPanResponderTerminate: () => {
+          setGrain(null);
+          setTarget(null);
+        },
+      }),
+    [housed, onFeed]
+  );
 
   return (
     <View style={styles.wrap}>
-      <View
-        style={styles.scene}
-        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-      >
+      <View style={styles.scene} ref={sceneRef} collapsable={false}>
         <Svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%">
           {/* 合板の壁 */}
           <Rect x="0" y="0" width={W} height={H} rx="3" fill={wood.frame} />
@@ -158,30 +230,157 @@ export function Loft({
         </Svg>
 
         {/* 巣箱に立つ鳩 */}
-        {scale > 0 &&
-          housed.map((pigeon, i) => (
-            <PerchedBird
-              key={pigeon.id}
-              pigeon={pigeon}
-              now={now}
-              slot={SLOTS[i]}
-              scale={scale}
-              birdWidth={birdWidth}
-              onPress={() => onSelect(pigeon)}
-            />
-          ))}
+        {housed.map((pigeon, i) => (
+          <PerchedBird
+            key={pigeon.id}
+            pigeon={pigeon}
+            now={now}
+            slot={SLOTS[i]}
+            targeted={target === i}
+            onPress={() => onSelect(pigeon)}
+          />
+        ))}
+
+        {/* 撒かれた餌 */}
+        {crumbs && SLOTS[crumbs.slot] && (
+          <Crumbs
+            key={crumbs.key}
+            slot={SLOTS[crumbs.slot]}
+            onDone={() => setCrumbs(null)}
+          />
+        )}
 
         {/* 鳩舎の前を横切っていく鳩 */}
-        {scale > 0 &&
-          flying.map((pigeon, i) => (
-            <FlyingBird key={pigeon.id} pigeon={pigeon} index={i} scale={scale} />
-          ))}
+        {flying.map((pigeon, i) => (
+          <FlyingBird key={pigeon.id} pigeon={pigeon} index={i} />
+        ))}
       </View>
 
-      <Text style={styles.count}>
-        巣箱 {housed.length} / {LOFT_CAPACITY}
-      </Text>
+      <View style={styles.trayRow}>
+        <View style={styles.tray} {...pan.panHandlers}>
+          <FeedBowl size={54} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.trayTitle}>餌</Text>
+          <Text style={styles.trayHint}>
+            つまんで、鳩の上まで持っていくと食べます
+          </Text>
+          <Text style={styles.count}>
+            巣箱 {housed.length} / {LOFT_CAPACITY}
+          </Text>
+        </View>
+      </View>
+
+      {/* 指についてくる餌 */}
+      {grain && (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.heldGrain,
+            {
+              left: grain.x - frame.current.x - 22,
+              top: grain.y - frame.current.y - 22,
+            },
+          ]}
+        >
+          <GrainPinch size={44} />
+        </View>
+      )}
     </View>
+  );
+}
+
+/** 餌の入った器 */
+function FeedBowl({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size * 0.78} viewBox="0 0 54 42">
+      <Ellipse cx="27" cy="18" rx="22" ry="9" fill="#8E6530" />
+      <Path d="M 5 18 Q 27 46 49 18 Z" fill="#A87B3C" />
+      <Ellipse cx="27" cy="17" rx="19" ry="7" fill="#6E4E24" />
+      {[
+        [18, 15],
+        [25, 13],
+        [32, 15],
+        [22, 18],
+        [30, 18],
+        [36, 17],
+        [14, 17],
+        [27, 20],
+      ].map(([cx, cy], i) => (
+        <Circle key={i} cx={cx} cy={cy} r="2.4" fill={grainColors[i % 4]} />
+      ))}
+    </Svg>
+  );
+}
+
+/** つまんだひとつまみの餌 */
+function GrainPinch({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 44 44">
+      <Circle cx="22" cy="22" r="15" fill="#EFE0C4" opacity={0.5} />
+      {[
+        [16, 18],
+        [24, 15],
+        [29, 22],
+        [20, 25],
+        [26, 29],
+        [14, 25],
+        [22, 21],
+      ].map(([cx, cy], i) => (
+        <Circle key={i} cx={cx} cy={cy} r="2.8" fill={grainColors[i % 4]} />
+      ))}
+    </Svg>
+  );
+}
+
+/** 食べたあとに床へこぼれた餌 */
+function Crumbs({
+  slot,
+  onDone,
+}: {
+  slot: (typeof SLOTS)[number];
+  onDone: () => void;
+}) {
+  const fade = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const anim = Animated.timing(fade, {
+      toValue: 0,
+      duration: 1600,
+      delay: 700,
+      easing: Easing.in(Easing.quad),
+      useNativeDriver: NATIVE,
+    });
+    anim.start(({ finished }) => {
+      if (finished) onDone();
+    });
+    return () => anim.stop();
+  }, []);
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: pct(slot.centerX - 17, W),
+        top: pct(slot.floorY - 4, H),
+        width: pct(34, W),
+        aspectRatio: 34 / 14,
+        opacity: fade,
+      }}
+    >
+      <Svg width="100%" height="100%" viewBox="0 0 34 14">
+        {[
+          [6, 8],
+          [12, 10],
+          [18, 7],
+          [24, 10],
+          [29, 8],
+        ].map(([cx, cy], i) => (
+          <Circle key={i} cx={cx} cy={cy} r="2" fill={grainColors[i % 4]} />
+        ))}
+      </Svg>
+    </Animated.View>
   );
 }
 
@@ -190,15 +389,13 @@ function PerchedBird({
   pigeon,
   now,
   slot,
-  scale,
-  birdWidth,
+  targeted,
   onPress,
 }: {
   pigeon: Pigeon;
   now: number;
   slot: (typeof SLOTS)[number];
-  scale: number;
-  birdWidth: number;
+  targeted: boolean;
   onPress: () => void;
 }) {
   const health = healthOf(pigeon, now);
@@ -279,8 +476,8 @@ function PerchedBird({
   }, [hop, health]);
 
   const translateY = Animated.add(
-    bob.interpolate({ inputRange: [0, 1], outputRange: [0, -motion.bob * scale] }),
-    hop.interpolate({ inputRange: [0, 1], outputRange: [0, -11 * scale] })
+    bob.interpolate({ inputRange: [0, 1], outputRange: [0, -motion.bob] }),
+    hop.interpolate({ inputRange: [0, 1], outputRange: [0, -10] })
   );
 
   // 弱った鳩は羽をふくらませてうずくまる
@@ -291,10 +488,6 @@ function PerchedBird({
         ? 'wings'
         : 'stand';
 
-  const birdHeight = (birdWidth * 40) / 48;
-  // 絵の中では足が y=36/40 の高さにある
-  const feetOffset = birdHeight * (36 / 40);
-
   return (
     <Pressable
       onPress={onPress}
@@ -302,41 +495,31 @@ function PerchedBird({
       style={[
         styles.perch,
         {
-          left: slot.centerX * scale,
-          top: slot.floorY * scale - feetOffset,
-          width: birdWidth,
-          height: birdHeight,
-          marginLeft: -birdWidth / 2,
+          left: pct(slot.left, W),
+          top: pct(slot.top, H),
+          width: pct(BIRD_W, W),
         },
+        targeted && styles.targeted,
       ]}
     >
       <Animated.View
-        style={{ transform: [{ translateY }], opacity: motion.opacity }}
+        style={{
+          width: '100%',
+          aspectRatio: 48 / 40,
+          transform: [{ translateY }],
+          opacity: motion.opacity,
+        }}
       >
-        <PigeonMark
-          variant={pigeon.variant}
-          size={birdWidth}
-          flip={flip}
-          pose={pose}
-        />
+        <PigeonMark variant={pigeon.variant} flip={flip} pose={pose} />
       </Animated.View>
     </Pressable>
   );
 }
 
 /** 鳩舎の前を横切っていく鳩 */
-function FlyingBird({
-  pigeon,
-  index,
-  scale,
-}: {
-  pigeon: Pigeon;
-  index: number;
-  scale: number;
-}) {
+function FlyingBird({ pigeon, index }: { pigeon: Pigeon; index: number }) {
   const cross = useRef(new Animated.Value(0)).current;
   const flap = useRef(new Animated.Value(0)).current;
-  const size = 46 * scale;
 
   useEffect(() => {
     cross.setValue(0);
@@ -345,7 +528,8 @@ function FlyingBird({
         toValue: 1,
         duration: 9000,
         easing: Easing.linear,
-        useNativeDriver: NATIVE,
+        // 割合で動かすので、ここは JS 側で回す
+        useNativeDriver: false,
       })
     );
     const delay = setTimeout(() => loop.start(), index * 2600);
@@ -376,30 +560,22 @@ function FlyingBird({
     return () => loop.stop();
   }, [flap]);
 
-  const translateX = cross.interpolate({
+  const left = cross.interpolate({
     inputRange: [0, 1],
-    outputRange: [-size, W * scale + size],
+    outputRange: ['-18%', '104%'],
   });
-  const translateY = cross.interpolate({
+  const top = cross.interpolate({
     inputRange: [0, 0.25, 0.5, 0.75, 1],
-    outputRange: [0, -10 * scale, 4 * scale, -8 * scale, 0],
+    outputRange: ['10%', '2%', '14%', '4%', '10%'],
   });
 
   return (
     <Animated.View
       pointerEvents="none"
-      style={[
-        styles.flyer,
-        {
-          top: (16 + (index % 3) * ROW_PITCH * 0.45) * scale,
-          width: size,
-          height: (size * 30) / 48,
-          transform: [{ translateX }, { translateY }],
-        },
-      ]}
+      style={[styles.flyer, { left, top, width: pct(46, W) }]}
     >
-      <Animated.View style={{ opacity: flap }}>
-        <PigeonFlyer variant={pigeon.variant} size={size} wingsUp />
+      <Animated.View style={{ width: '100%', aspectRatio: 48 / 30, opacity: flap }}>
+        <PigeonFlyer variant={pigeon.variant} wingsUp />
       </Animated.View>
       <Animated.View
         style={[
@@ -412,22 +588,46 @@ function FlyingBird({
           },
         ]}
       >
-        <PigeonFlyer variant={pigeon.variant} size={size} wingsUp={false} />
+        <View style={{ width: '100%', aspectRatio: 48 / 30 }}>
+          <PigeonFlyer variant={pigeon.variant} wingsUp={false} />
+        </View>
       </Animated.View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginBottom: 16 },
+  wrap: { marginBottom: 16, position: 'relative' },
   scene: { width: '100%', aspectRatio: W / H, position: 'relative' },
   perch: { position: 'absolute' },
-  flyer: { position: 'absolute', left: 0 },
+  targeted: { borderRadius: 999, backgroundColor: 'rgba(255,246,214,0.6)' },
+  flyer: { position: 'absolute' },
+  trayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 12,
+  },
+  tray: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.line,
+  },
+  trayTitle: {
+    fontSize: 13,
+    color: theme.ink,
+    fontWeight: '600',
+    letterSpacing: 2,
+  },
+  trayHint: { fontSize: 12, color: theme.inkSoft, marginTop: 2 },
   count: {
-    textAlign: 'center',
     color: theme.inkFaint,
     fontSize: 12,
-    marginTop: 8,
+    marginTop: 6,
     letterSpacing: 1,
   },
+  heldGrain: { position: 'absolute', zIndex: 20 },
 });

@@ -22,6 +22,7 @@ import { radius, theme } from '../theme';
 import { Button, Muted } from '../components/ui';
 import { PigeonProgress } from '../components/PigeonProgress';
 import { PigeonMark, variantFor } from '../pigeonArt';
+import { QrView } from '../components/QrView';
 import { encodeLetter } from '../pigeonCode';
 import { confirmDestructive } from '../confirm';
 
@@ -188,15 +189,17 @@ export function LetterDetail({
 
           {outbound && status !== 'lost' && (
             <View style={{ marginTop: 24 }}>
+              <QrView value={code} size={200} />
               <Button
                 label="手紙コードを相手に送る"
                 tone="quiet"
                 onPress={handoff}
+                style={{ marginTop: 16 }}
               />
               <Muted style={{ marginTop: 10 }}>
                 {live.pigeonName}は{live.peerName}さんの鳩なので、
-                このコードを送ると相手の鳩舎へ帰り着きます。
-                コード自体は今すぐ渡してかまいません。中身は到着まで開きません。
+                この QR を読んでもらうと相手の鳩舎へ帰り着きます。
+                いま読んでもらってかまいません。中身は到着まで開きません。
               </Muted>
               <Pressable onPress={() => setShowCode((v) => !v)}>
                 <Text style={styles.link}>

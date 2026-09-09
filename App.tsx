@@ -15,6 +15,7 @@ import { ComposeScreen, Draft } from './src/screens/ComposeScreen';
 import { LetterDetail } from './src/screens/LetterDetail';
 import { Notice, Received, ReceiveScreen } from './src/screens/ReceiveScreen';
 import { ConfirmHost } from './src/confirm';
+import { flyAway, FlyAwayHost } from './src/flyaway';
 import { PigeonMark, variantFor } from './src/pigeonArt';
 
 type Tab = 'sky' | 'box' | 'roost' | 'settings';
@@ -153,7 +154,10 @@ function Main() {
           setComposing(false);
           setDraft(null);
           setTab('sky');
-          setNotice(noticeForLetter(letter));
+          // 放った鳩が飛び去るのを見せてから、行き先を知らせる
+          flyAway(letter.pigeonVariant ?? variantFor(letter.pigeonId), () =>
+            setNotice(noticeForLetter(letter))
+          );
         }}
         onNeedPigeon={() => setTab('roost')}
       />
@@ -176,6 +180,7 @@ function Main() {
       )}
 
       <ConfirmHost />
+      <FlyAwayHost />
 
       {notice && (
         <Notice
