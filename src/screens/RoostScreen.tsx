@@ -18,6 +18,7 @@ import {
   letterStatus,
   LOFT_CAPACITY,
   pigeonStatus,
+  PigeonStatus,
   pigeonTrips,
   STATUS_LABEL,
 } from '../flock';
@@ -34,6 +35,29 @@ import { flyAway } from '../flyaway';
 import { encodePigeon } from '../pigeonCode';
 import { confirmDestructive } from '../confirm';
 
+/** その鳩を消したとき、何が起きるか */
+function removalNote(pigeon: Pigeon, status: PigeonStatus): string {
+  if (status === 'lent') {
+    return `${pigeon.name}を記録から消します。その鳩が持って帰る手紙は届きますが、鳩は鳩舎に戻りません。`;
+  }
+  if (status === 'flying') {
+    return `${pigeon.name}を記録から消します。運んでいる手紙はそのまま届きます。`;
+  }
+  if (!pigeon.mine) {
+    return `${pigeon.name}を記録から消します。預かっている鳩なので、飼い主のもとには戻せません。`;
+  }
+  return `${pigeon.name}を記録から消します。取り消せません。`;
+}
+
+/** 一覧の右肩に出す、小さな削除の口 */
+function RemoveLink({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable hitSlop={10} onPress={onPress}>
+      <Text style={styles.remove}>消す</Text>
+    </Pressable>
+  );
+}
+
 export function RoostScreen({
   onWrite,
   onReceive,
@@ -48,6 +72,15 @@ export function RoostScreen({
   const [borrowing, setBorrowing] = useState(false);
   const [acting, setActing] = useState<Pigeon | null>(null);
   const [taken, setTaken] = useState<Pigeon | null>(null);
+
+  const askRemove = (pigeon: Pigeon) => {
+    confirmDestructive(
+      `${pigeon.name}を消しますか`,
+      removalNote(pigeon, pigeonStatus(pigeon, state.letters, Date.now())),
+      '消す',
+      () => removePigeon(pigeon.id)
+    );
+  };
 
   const groups = useMemo(() => {
     const here: Pigeon[] = [];
@@ -102,6 +135,7 @@ export function RoostScreen({
             homeName={state.home?.name}
             onGive={() => setGiving(p)}
             onWrite={() => onWrite(p.id)}
+            onRemove={() => askRemove(p)}
           />
         ))
       )}
@@ -150,6 +184,7 @@ export function RoostScreen({
                     ・手紙を持って帰るのを待っています
                   </Muted>
                 </View>
+                <RemoveLink onPress={() => askRemove(p)} />
               </View>
               <Button
                 label="鳩コードをもう一度渡す"
@@ -185,6 +220,7 @@ export function RoostScreen({
                         : '空の上'}
                     </Muted>
                   </View>
+                  <RemoveLink onPress={() => askRemove(p)} />
                 </View>
               </Card>
             );
@@ -213,19 +249,7 @@ export function RoostScreen({
                       ・{pigeonTrips(p, state.letters, now)}回運びました
                     </Muted>
                   </View>
-                  <Pressable
-                    hitSlop={10}
-                    onPress={() =>
-                      confirmDestructive(
-                        '記録から消しますか',
-                        `${p.name}の記録が消えます。`,
-                        '消す',
-                        () => removePigeon(p.id)
-                      )
-                    }
-                  >
-                    <Text style={styles.remove}>消す</Text>
-                  </Pressable>
+                  <RemoveLink onPress={() => askRemove(p)} />
                 </View>
               </Card>
             );
@@ -256,6 +280,11 @@ export function RoostScreen({
           setActing(null);
           if (target) onWrite(target.id);
         }}
+        onRemove={() => {
+          const target = acting;
+          setActing(null);
+          if (target) askRemove(target);
+        }}
       />
       <GivePigeon
         pigeon={giving}
@@ -284,12 +313,14 @@ function HerePigeon({
   homeName,
   onGive,
   onWrite,
+  onRemove,
 }: {
   pigeon: Pigeon;
   now: number;
   homeName?: string;
   onGive: () => void;
   onWrite: () => void;
+  onRemove: () => void;
 }) {
   const health = healthOf(pigeon, now);
 
@@ -307,6 +338,7 @@ function HerePigeon({
               : `${pigeon.ownerName}さんの鳩・${pigeon.loft.name}へ帰ります`}
           </Muted>
         </View>
+        <RemoveLink onPress={onRemove} />
       </View>
 
       <HungerGauge pigeon={pigeon} now={now} />
@@ -334,12 +366,14 @@ function PigeonActions({
   onClose,
   onGive,
   onWrite,
+  onRemove,
 }: {
   pigeon: Pigeon | null;
   now: number;
   onClose: () => void;
   onGive: () => void;
   onWrite: () => void;
+  onRemove: () => void;
 }) {
   if (!pigeon) return null;
 
@@ -367,6 +401,12 @@ function PigeonActions({
             label="閉じる"
             tone="quiet"
             onPress={onClose}
+            style={{ marginTop: 10, alignSelf: 'stretch' }}
+          />
+          <Button
+            label="この鳩を消す"
+            tone="danger"
+            onPress={onRemove}
             style={{ marginTop: 10, alignSelf: 'stretch' }}
           />
         </View>
