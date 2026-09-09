@@ -4,10 +4,42 @@ import jsQR from 'jsqr';
 import { radius, theme } from '../theme';
 import { Button, Muted } from './ui';
 
+/** 画像を読み込んで、その中の QR を探す */
+async function decodeImage(file: File): Promise<string | null> {
+  const url = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = url;
+    });
+    // 大きすぎる写真はそのままだと重いので、長辺 1600px に収める
+    const scale = Math.min(1, 1600 / Math.max(image.width, image.height));
+    const w = Math.round(image.width * scale);
+    const h = Math.round(image.height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(image, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h).data;
+    return (
+      jsQR(data, w, h, { inversionAttempts: 'attemptBoth' })?.data ?? null
+    );
+  } catch {
+    return null;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 /**
  * ブラウザで QR を読む。
  * expo-camera のバーコード読み取りは web に対応していないので、
  * カメラ映像を自前で取り出して jsQR にかける。
+ * 写真やスクリーンショットからも読める。
  */
 export function QrScanner({
   onRead,
@@ -18,9 +50,11 @@ export function QrScanner({
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const doneRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
 
   useEffect(() => {
     let raf = 0;
@@ -60,9 +94,7 @@ export function QrScanner({
 
     const start = async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
-        setError(
-          'このブラウザではカメラを使えません。コードを貼り付けてください。'
-        );
+        setError('このブラウザではカメラを使えません。');
         return;
       }
       try {
@@ -77,9 +109,7 @@ export function QrScanner({
         }
         raf = requestAnimationFrame(scan);
       } catch {
-        setError(
-          'カメラを開けませんでした。許可を確かめるか、コードを貼り付けてください。'
-        );
+        setError('カメラを開けませんでした。許可を確かめてください。');
       }
     };
 
@@ -87,11 +117,58 @@ export function QrScanner({
     return stop;
   }, [onRead]);
 
+  const onPick = async (file?: File | null) => {
+    if (!file) return;
+    setNote(null);
+    const value = await decodeImage(file);
+    if (!value) {
+      setNote('その画像から QR を見つけられませんでした。');
+      return;
+    }
+    doneRef.current = true;
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    onRead(value);
+  };
+
+  const picker = (
+    <>
+      {/* web 専用ファイルなので、DOM の要素をそのまま置ける */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          onPick(file);
+        }}
+      />
+      <Button
+        label="画像から読み取る"
+        tone="quiet"
+        onPress={() => fileRef.current?.click()}
+        style={{ marginTop: 12, alignSelf: 'stretch' }}
+      />
+    </>
+  );
+
   if (error) {
     return (
       <View style={styles.center}>
-        <Muted style={{ textAlign: 'center', marginBottom: 16 }}>{error}</Muted>
-        <Button label="やめる" tone="quiet" onPress={onCancel} />
+        <Muted style={{ textAlign: 'center', marginBottom: 4 }}>
+          {error}
+          {'\n'}
+          写真に撮ってある QR なら、カメラなしでも読めます。
+        </Muted>
+        {picker}
+        {!!note && <Text style={styles.note}>{note}</Text>}
+        <Button
+          label="やめる"
+          tone="quiet"
+          onPress={onCancel}
+          style={{ marginTop: 10, alignSelf: 'stretch' }}
+        />
       </View>
     );
   }
@@ -99,7 +176,6 @@ export function QrScanner({
   return (
     <View style={styles.wrap}>
       <View style={styles.viewport}>
-        {/* web 専用ファイルなので、DOM の要素をそのまま置ける */}
         <video
           ref={videoRef}
           playsInline
@@ -115,13 +191,15 @@ export function QrScanner({
         <View pointerEvents="none" style={styles.reticle} />
       </View>
       <Text style={styles.hint}>相手の画面の QR を枠に入れてください</Text>
+      {picker}
+      {!!note && <Text style={styles.note}>{note}</Text>}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignItems: 'center' },
-  center: { alignItems: 'center', paddingVertical: 24 },
+  wrap: { alignItems: 'center', alignSelf: 'stretch' },
+  center: { alignItems: 'center', alignSelf: 'stretch', paddingVertical: 24 },
   viewport: {
     width: '100%',
     aspectRatio: 1,
@@ -141,4 +219,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   hint: { color: theme.inkSoft, fontSize: 13, marginTop: 12 },
+  note: { color: '#A03E5B', fontSize: 13, marginTop: 10, textAlign: 'center' },
 });

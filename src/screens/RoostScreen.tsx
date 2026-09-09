@@ -28,6 +28,8 @@ import { Button, Card, Empty, Muted, SectionTitle } from '../components/ui';
 import { Loft } from '../components/Loft';
 import { HungerGauge } from '../components/HungerGauge';
 import { QrView } from '../components/QrView';
+import { QrScanner } from '../components/QrScanner';
+import { Notice } from './ReceiveScreen';
 import { flyAway } from '../flyaway';
 import { encodePigeon } from '../pigeonCode';
 import { confirmDestructive } from '../confirm';
@@ -45,6 +47,7 @@ export function RoostScreen({
   const [giving, setGiving] = useState<Pigeon | null>(null);
   const [borrowing, setBorrowing] = useState(false);
   const [acting, setActing] = useState<Pigeon | null>(null);
+  const [taken, setTaken] = useState<Pigeon | null>(null);
 
   const groups = useMemo(() => {
     const here: Pigeon[] = [];
@@ -258,7 +261,19 @@ export function RoostScreen({
         pigeon={giving}
         onClose={() => setGiving(null)}
       />
-      <BorrowPigeon visible={borrowing} onClose={() => setBorrowing(false)} />
+      <BorrowPigeon
+        visible={borrowing}
+        onClose={() => setBorrowing(false)}
+        onReceived={setTaken}
+      />
+      {taken && (
+        <Notice
+          mark={<PigeonMark variant={taken.variant} size={54} />}
+          title={`${taken.name}を預かりました`}
+          detail={`${taken.ownerName}さんの鳩です。餌をやるのはあなた。放てば${taken.loft.name}へ帰ります。`}
+          onClose={() => setTaken(null)}
+        />
+      )}
     </ScrollView>
   );
 }
@@ -490,27 +505,55 @@ function GivePigeon({
   );
 }
 
-/** 相手の鳩を預かったことにする（手渡しの記録） */
+/**
+ * 相手の鳩を預かる。
+ * ふつうは相手の QR を読む。読めないときのために、手で書き留める道もある。
+ */
 function BorrowPigeon({
   visible,
   onClose,
+  onReceived,
 }: {
   visible: boolean;
   onClose: () => void;
+  onReceived: (pigeon: Pigeon) => void;
 }) {
-  const { state, borrowPigeon } = useStore();
+  const { state, borrowPigeon, receiveCode } = useStore();
+  const [byHand, setByHand] = useState(false);
+  const [error, setError] = useState('');
   const [contactId, setContactId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [variant, setVariant] = useState(PLUMAGES[0].id);
 
   const contact = state.contacts.find((c) => c.id === contactId);
 
-  const submit = () => {
-    if (!contactId) return;
-    borrowPigeon(contactId, name, variant);
+  const close = () => {
+    setByHand(false);
+    setError('');
     setContactId(null);
     setName('');
     onClose();
+  };
+
+  const scanned = async (value: string) => {
+    const result = await receiveCode(value);
+    if (!result.ok) {
+      setError(result.reason);
+      return;
+    }
+    if (result.kind === 'pigeon') {
+      close();
+      onReceived(result.pigeon);
+      return;
+    }
+    // 手紙の QR だった。受け取れてはいるので、そのまま知らせる
+    setError('いまのは手紙の QR でした。文箱で受け取っています。');
+  };
+
+  const submit = () => {
+    if (!contactId) return;
+    borrowPigeon(contactId, name, variant);
+    close();
   };
 
   return (
@@ -526,9 +569,29 @@ function BorrowPigeon({
           contentContainerStyle={{ padding: 20 }}
           keyboardShouldPersistTaps="handled"
         >
+          {!byHand ? (
+            <>
+              <Muted style={{ marginBottom: 16 }}>
+                相手に「誰かに渡す」を開いてもらって、出てきた QR を読み取ります。
+                送ってもらった QR の画像からも読めます。
+              </Muted>
+              <QrScanner onRead={scanned} onCancel={close} />
+              {!!error && <Text style={styles.error}>{error}</Text>}
+              <Button
+                label="QR がないので手で書き留める"
+                tone="quiet"
+                onPress={() => {
+                  setError('');
+                  setByHand(true);
+                }}
+                style={{ marginTop: 16 }}
+              />
+              <View style={{ height: 40 }} />
+            </>
+          ) : (
+            <>
           <Muted style={{ marginBottom: 16 }}>
-            相手から鳩コードをもらっているなら「受け取る」から貼り付けてください。
-            直接手渡しで受け取ったときは、ここに書き留めます。
+            直接手渡しで受け取って、QR もないときは、ここに書き留めます。
           </Muted>
 
           <SectionTitle>誰の鳩</SectionTitle>
@@ -596,6 +659,14 @@ function BorrowPigeon({
             disabled={!contactId}
             style={{ marginTop: 26 }}
           />
+          <Button
+            label="QR を読み取る"
+            tone="quiet"
+            onPress={() => setByHand(false)}
+            style={{ marginTop: 10 }}
+          />
+            </>
+          )}
           <View style={{ height: 40 }} />
         </ScrollView>
       </View>
@@ -615,6 +686,7 @@ const styles = StyleSheet.create({
   goneCard: { backgroundColor: theme.paperDeep, borderStyle: 'dashed' },
   actions: { flexDirection: 'row', gap: 10, marginTop: 12 },
   remove: { color: '#A03E5B', fontSize: 13 },
+  error: { color: '#A03E5B', fontSize: 13, marginTop: 12, textAlign: 'center' },
   label: {
     fontSize: 12,
     color: theme.inkSoft,
