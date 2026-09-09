@@ -20,8 +20,11 @@ export type Contact = {
 export type Custody =
   /** 手元にいる。世話をするのは自分 */
   | { kind: 'here' }
-  /** 誰かに預けてある。世話をするのは相手 */
-  | { kind: 'lent'; contactId: string; contactName: string; at: number };
+  /**
+   * 誰かに預けてある。世話をするのは相手。
+   * QR を読んでもらって渡したときは、相手が誰かは分からないままでもよい。
+   */
+  | { kind: 'lent'; contactId?: string; contactName?: string; at: number };
 
 export type Pigeon = {
   id: string;

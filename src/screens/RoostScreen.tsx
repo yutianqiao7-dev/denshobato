@@ -141,8 +141,10 @@ export function RoostScreen({
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{p.name}</Text>
                   <Muted>
-                    {p.custody.kind === 'lent' ? p.custody.contactName : ''}
-                    さんのところ・手紙を持って帰るのを待っています
+                    {p.custody.kind === 'lent' && p.custody.contactName
+                      ? `${p.custody.contactName}さんのところ`
+                      : '渡したまま'}
+                    ・手紙を持って帰るのを待っています
                   </Muted>
                 </View>
               </View>
@@ -367,25 +369,31 @@ function GivePigeon({
   onClose: () => void;
 }) {
   const { state, givePigeon } = useStore();
-  const [code, setCode] = useState<string | null>(null);
+  /** QR を見せている段階か、渡し終えて相手を書き留める段階か */
+  const [step, setStep] = useState<'qr' | 'who'>('qr');
+  const [showCode, setShowCode] = useState(false);
 
   if (!pigeon) return null;
 
   const alreadyLent = pigeon.custody.kind === 'lent';
-
-  const give = (contactId: string) => {
-    const handed = encodePigeon(pigeon, state.myName);
-    givePigeon(pigeon.id, contactId);
-    // 手放したことが見えるように、いったん飛ばしてからコードを出す
-    flyAway(pigeon.variant, () => setCode(handed));
-  };
+  const code = encodePigeon(pigeon, state.myName);
 
   const close = () => {
-    setCode(null);
+    setStep('qr');
+    setShowCode(false);
     onClose();
   };
 
-  const shown = code ?? (alreadyLent ? encodePigeon(pigeon, state.myName) : null);
+  // 読み取ってもらえたかどうかはこちらでは分からないので、渡した本人が決める
+  const handed = () => {
+    givePigeon(pigeon.id);
+    flyAway(pigeon.variant, () => setStep('who'));
+  };
+
+  const remember = (contact?: { id: string; name: string }) => {
+    if (contact) givePigeon(pigeon.id, contact);
+    close();
+  };
 
   return (
     <Modal visible animationType="slide" onRequestClose={close}>
@@ -397,23 +405,66 @@ function GivePigeon({
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={{ padding: 20 }}>
-          {shown === null ? (
+          {step === 'qr' ? (
             <>
+              <Text style={styles.handTitle}>この QR を読んでもらう</Text>
               <Muted style={{ marginBottom: 16 }}>
-                渡した鳩は相手の手元で暮らします。世話をするのも相手です。
-                相手がこの鳩を放つと、手紙を持ってあなたの鳩舎へ帰ってきます。
+                相手に「鳩舎 → コードを貼り付ける」を開いてもらって、
+                これをカメラで読んでもらってください。それで{pigeon.name}が
+                相手の手元に移ります。世話をするのも相手になります。
               </Muted>
-              <SectionTitle>誰に渡す</SectionTitle>
-              {state.contacts.length === 0 ? (
-                <Muted>
-                  先に「設定」で相手を登録してください。
-                </Muted>
-              ) : (
+
+              <QrView value={code} />
+
+              <Muted style={{ marginTop: 16 }}>
+                {pigeon.name}は{state.home?.name ?? 'あなたの鳩舎'}
+                へ帰る鳩です。相手がこの鳩を放つと、手紙を持ってあなたのところへ帰ってきます。
+              </Muted>
+
+              {!alreadyLent && (
+                <Button
+                  label="読んでもらった"
+                  onPress={handed}
+                  style={{ marginTop: 20 }}
+                />
+              )}
+
+              <Button
+                label="離れているので、コードを送る"
+                tone="quiet"
+                onPress={() =>
+                  Share.share({
+                    message: `${pigeon.name}を預けます。「伝書鳩」アプリで受け取ってください。\n\n${code}`,
+                  }).catch(() => setShowCode(true))
+                }
+                style={{ marginTop: 10 }}
+              />
+              <Pressable onPress={() => setShowCode((v) => !v)}>
+                <Text style={styles.link}>
+                  {showCode ? 'コードを隠す' : 'コードを文字で表示する'}
+                </Text>
+              </Pressable>
+              {showCode && (
+                <Text selectable style={styles.code}>
+                  {code}
+                </Text>
+              )}
+            </>
+          ) : (
+            <>
+              <Text style={styles.handTitle}>
+                {pigeon.name}は誰のところへ？
+              </Text>
+              <Muted style={{ marginBottom: 16 }}>
+                書き留めておくと、鳩舎で「誰のところにいるか」が分かります。
+                分からなければ、そのままで大丈夫です。
+              </Muted>
+              {state.contacts.length > 0 && (
                 <View style={styles.chips}>
                   {state.contacts.map((c) => (
                     <Pressable
                       key={c.id}
-                      onPress={() => give(c.id)}
+                      onPress={() => remember({ id: c.id, name: c.name })}
                       style={styles.chip}
                     >
                       <Text style={styles.chipText}>
@@ -424,29 +475,12 @@ function GivePigeon({
                   ))}
                 </View>
               )}
-            </>
-          ) : (
-            <>
-              <Text style={styles.handTitle}>
-                {pigeon.name}を手渡してください
-              </Text>
-              <Muted style={{ marginBottom: 16 }}>
-                相手に「コードを受け取る」を開いてもらって、この QR
-                をカメラで読んでもらってください。離れているなら、下のボタンで文字のまま送れます。
-              </Muted>
-              <QrView value={shown} />
               <Button
-                label="鳩コードを送る"
-                onPress={() =>
-                  Share.share({
-                    message: `${pigeon.name}を預けます。「伝書鳩」アプリで受け取ってください。\n\n${shown}`,
-                  }).catch(() => undefined)
-                }
+                label="書き留めない"
+                tone="quiet"
+                onPress={() => remember()}
+                style={{ marginTop: 20 }}
               />
-              <Text selectable style={styles.code}>
-                {shown}
-              </Text>
-              <Button label="閉じる" tone="quiet" onPress={close} />
             </>
           )}
           <View style={{ height: 40 }} />
@@ -657,6 +691,7 @@ const styles = StyleSheet.create({
     color: theme.ink,
     marginTop: 6,
   },
+  link: { color: theme.accent, fontSize: 14, marginTop: 14, textAlign: 'center' },
   code: {
     marginTop: 14,
     marginBottom: 14,

@@ -63,8 +63,14 @@ type Store = {
     name: string,
     variant?: string
   ) => Pigeon | null;
-  /** 自分の鳩を誰かに預ける */
-  givePigeon: (pigeonId: string, contactId: string) => void;
+  /**
+   * 自分の鳩を誰かに預ける。
+   * QR を読んでもらって渡す場合、相手が誰かは後から記録してもよい。
+   */
+  givePigeon: (
+    pigeonId: string,
+    contact?: { id: string; name: string }
+  ) => void;
   /** 世話をする */
   feedPigeon: (pigeonId: string) => void;
   feedAll: () => void;
@@ -249,30 +255,33 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  const givePigeon = useCallback((pigeonId: string, contactId: string) => {
-    const s = stateRef.current;
-    const contact = s.contacts.find((c) => c.id === contactId);
-    if (!contact) return;
-    const target = s.pigeons.find((p) => p.id === pigeonId);
-    cancelArrival(target?.careNotificationId);
-    setState((prev) => ({
-      ...prev,
-      pigeons: prev.pigeons.map((p) =>
-        p.id === pigeonId
-          ? {
-              ...p,
-              custody: {
-                kind: 'lent',
-                contactId,
-                contactName: contact.name,
-                at: Date.now(),
-              },
-              careNotificationId: undefined,
-            }
-          : p
-      ),
-    }));
-  }, []);
+  const givePigeon = useCallback(
+    (pigeonId: string, contact?: { id: string; name: string }) => {
+      const target = stateRef.current.pigeons.find((p) => p.id === pigeonId);
+      cancelArrival(target?.careNotificationId);
+      // すでに渡してある鳩に名前だけ付けるときは、渡した時刻を動かさない
+      const at =
+        target?.custody.kind === 'lent' ? target.custody.at : Date.now();
+      setState((prev) => ({
+        ...prev,
+        pigeons: prev.pigeons.map((p) =>
+          p.id === pigeonId
+            ? {
+                ...p,
+                custody: {
+                  kind: 'lent',
+                  contactId: contact?.id,
+                  contactName: contact?.name,
+                  at,
+                },
+                careNotificationId: undefined,
+              }
+            : p
+        ),
+      }));
+    },
+    []
+  );
 
   /** 世話をしたあとの通知を組み直す */
   const rescheduleCare = useCallback(
