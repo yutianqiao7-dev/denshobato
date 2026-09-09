@@ -124,12 +124,15 @@ export function PigeonMark({
   size,
   flip = false,
   pose = 'stand',
+  band,
 }: {
   variant?: string;
   /** 省略すると親の大きさいっぱいに描く */
   size?: number;
   flip?: boolean;
   pose?: Pose;
+  /** 足環の色。よその鳩には環が付いている */
+  band?: string;
 }) {
   const p = plumage(variant);
   const w = size === undefined ? '100%' : size;
@@ -137,13 +140,25 @@ export function PigeonMark({
   return (
     <Svg width={w} height={h} viewBox="0 0 48 40">
       <G transform={flip ? 'translate(48,0) scale(-1,1)' : undefined}>
-        {pose === 'fluff' ? <Fluffed p={p} /> : <Upright p={p} pose={pose} />}
+        {pose === 'fluff' ? (
+          <Fluffed p={p} />
+        ) : (
+          <Upright p={p} pose={pose} band={band} />
+        )}
       </G>
     </Svg>
   );
 }
 
-function Upright({ p, pose }: { p: Plumage; pose: Pose }) {
+function Upright({
+  p,
+  pose,
+  band,
+}: {
+  p: Plumage;
+  pose: Pose;
+  band?: string;
+}) {
   return (
     <>
       {/* 尾羽 */}
@@ -211,6 +226,25 @@ function Upright({ p, pose }: { p: Plumage; pose: Pose }) {
       <Path d="M 27.4 31.4 L 28.4 35.4" stroke={FOOT} strokeWidth="1.7" strokeLinecap="round" />
       <Path d="M 19.8 36 L 24.2 36" stroke={FOOT} strokeWidth="1.5" strokeLinecap="round" />
       <Path d="M 26.2 36 L 30.6 36" stroke={FOOT} strokeWidth="1.5" strokeLinecap="round" />
+
+      {/* 足環。よその鳩だと分かる目印 */}
+      {band && (
+        <>
+          <Path
+            d="M 22.7 32.8 L 22.4 34.2"
+            stroke={band}
+            strokeWidth="3"
+            strokeLinecap="butt"
+          />
+          <Path
+            d="M 27.7 32.8 L 28 34.2"
+            stroke={band}
+            strokeWidth="3"
+            strokeLinecap="butt"
+            opacity={0.55}
+          />
+        </>
+      )}
     </>
   );
 }

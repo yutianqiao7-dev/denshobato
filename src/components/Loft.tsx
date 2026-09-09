@@ -14,6 +14,7 @@ import { Pigeon } from '../types';
 import { fullnessOf, Health, healthOf, LOFT_CAPACITY } from '../flock';
 import { PigeonFlyer, PigeonMark, Pose } from '../pigeonArt';
 import { HUNGER_COLOR } from './HungerGauge';
+import { RING_COLORS } from '../cities';
 import { theme } from '../theme';
 
 const NATIVE = Platform.OS !== 'web';
@@ -76,6 +77,16 @@ const wood = {
 };
 
 const grainColors = ['#C99A4E', '#A87B3C', '#E0BE7A', '#8E6530'];
+
+/** 預かった鳩の足環。飼い主ごとに色が決まる */
+function bandFor(pigeon: Pigeon): string | undefined {
+  if (pigeon.mine) return undefined;
+  let hash = 0;
+  for (let i = 0; i < pigeon.ownerName.length; i++) {
+    hash = (hash * 31 + pigeon.ownerName.charCodeAt(i)) >>> 0;
+  }
+  return RING_COLORS[hash % RING_COLORS.length];
+}
 
 /** 調子ごとの、鳩の動きかた */
 const MOTION: Record<Health, { bob: number; period: number; opacity: number }> = {
@@ -241,6 +252,29 @@ export function Loft({
             onPress={() => onSelect(pigeon)}
           />
         ))}
+
+        {/* よその鳩の巣箱には、飼い主の名札を掛けておく */}
+        {housed.map((pigeon, i) =>
+          pigeon.mine ? null : (
+            <View
+              key={`n-${pigeon.id}`}
+              pointerEvents="none"
+              style={[
+                styles.plate,
+                {
+                  left: pct(cellX(SLOTS[i].col) + 2, W),
+                  top: pct(cellY(SLOTS[i].row) + 2, H),
+                  maxWidth: pct(CELL_W - 4, W),
+                  borderColor: bandFor(pigeon),
+                },
+              ]}
+            >
+              <Text style={styles.plateText} numberOfLines={1}>
+                {pigeon.ownerName}
+              </Text>
+            </View>
+          )
+        )}
 
         {/* 巣箱の縁に出す、その一羽の腹の減り具合 */}
         {housed.map((pigeon, i) => (
@@ -557,7 +591,12 @@ function PerchedBird({
           opacity: motion.opacity,
         }}
       >
-        <PigeonMark variant={pigeon.variant} flip={flip} pose={pose} />
+        <PigeonMark
+          variant={pigeon.variant}
+          flip={flip}
+          pose={pose}
+          band={bandFor(pigeon)}
+        />
       </Animated.View>
     </Pressable>
   );
@@ -647,6 +686,15 @@ const styles = StyleSheet.create({
   wrap: { marginBottom: 16, position: 'relative' },
   scene: { width: '100%', aspectRatio: W / H, position: 'relative' },
   perch: { position: 'absolute' },
+  plate: {
+    position: 'absolute',
+    backgroundColor: 'rgba(250,244,232,0.92)',
+    borderRadius: 2,
+    borderLeftWidth: 3,
+    paddingHorizontal: 2,
+    alignSelf: 'flex-start',
+  },
+  plateText: { fontSize: 8, lineHeight: 12, color: theme.ink },
   targeted: { borderRadius: 999, backgroundColor: 'rgba(255,246,214,0.6)' },
   flyer: { position: 'absolute' },
   trayRow: {

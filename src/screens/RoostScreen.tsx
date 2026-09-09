@@ -23,6 +23,7 @@ import {
   STATUS_LABEL,
 } from '../flock';
 import { PigeonMark, PLUMAGES } from '../pigeonArt';
+import { RING_COLORS } from '../cities';
 import { useNow } from '../useNow';
 import { radius, theme } from '../theme';
 import { Button, Card, Empty, Muted, SectionTitle } from '../components/ui';
@@ -34,6 +35,16 @@ import { Notice } from './ReceiveScreen';
 import { flyAway } from '../flyaway';
 import { encodePigeon } from '../pigeonCode';
 import { confirmDestructive } from '../confirm';
+
+/** 預かった鳩の足環。飼い主ごとに色が決まる（鳩舎の絵と同じ規則） */
+function bandFor(pigeon: Pigeon): string | undefined {
+  if (pigeon.mine) return undefined;
+  let hash = 0;
+  for (let i = 0; i < pigeon.ownerName.length; i++) {
+    hash = (hash * 31 + pigeon.ownerName.charCodeAt(i)) >>> 0;
+  }
+  return RING_COLORS[hash % RING_COLORS.length];
+}
 
 /** その鳩を消したとき、何が起きるか */
 function removalNote(pigeon: Pigeon, status: PigeonStatus): string {
@@ -97,6 +108,9 @@ export function RoostScreen({
     return { here, lent, flying, gone };
   }, [state.pigeons, state.letters, now]);
 
+  const mine = groups.here.filter((p) => p.mine);
+  const borrowed = groups.here.filter((p) => !p.mine);
+
   const needsCare = groups.here.filter(
     (p) => healthOf(p, now) !== 'fine'
   ).length;
@@ -120,24 +134,54 @@ export function RoostScreen({
         onFeed={(p) => feedPigeon(p.id)}
       />
 
-      <SectionTitle>手元の鳩</SectionTitle>
-      {groups.here.length === 0 ? (
-        <Empty
-          emoji="🪹"
-          text={'鳩舎は空です。\n新しい鳩を迎えるか、誰かの鳩を預かってください。'}
-        />
-      ) : (
-        groups.here.map((p) => (
-          <HerePigeon
-            key={p.id}
-            pigeon={p}
-            now={now}
-            homeName={state.home?.name}
-            onGive={() => setGiving(p)}
-            onWrite={() => onWrite(p.id)}
-            onRemove={() => askRemove(p)}
+      {groups.here.length === 0 && (
+        <>
+          <SectionTitle>手元の鳩</SectionTitle>
+          <Empty
+            emoji="🪹"
+            text={'鳩舎は空です。\n新しい鳩を迎えるか、誰かの鳩を預かってください。'}
           />
-        ))
+        </>
+      )}
+
+      {mine.length > 0 && (
+        <>
+          <SectionTitle>自分の鳩</SectionTitle>
+          <Muted style={{ marginTop: -4, marginBottom: 10 }}>
+            渡した相手が放つと、手紙を持って帰ってきます。
+          </Muted>
+          {mine.map((p) => (
+            <HerePigeon
+              key={p.id}
+              pigeon={p}
+              now={now}
+              homeName={state.home?.name}
+              onGive={() => setGiving(p)}
+              onWrite={() => onWrite(p.id)}
+              onRemove={() => askRemove(p)}
+            />
+          ))}
+        </>
+      )}
+
+      {borrowed.length > 0 && (
+        <>
+          <SectionTitle>預かっている鳩</SectionTitle>
+          <Muted style={{ marginTop: -4, marginBottom: 10 }}>
+            手紙を持たせて放つと、飼い主の鳩舎へ帰ります。足環が付いています。
+          </Muted>
+          {borrowed.map((p) => (
+            <HerePigeon
+              key={p.id}
+              pigeon={p}
+              now={now}
+              homeName={state.home?.name}
+              onGive={() => setGiving(p)}
+              onWrite={() => onWrite(p.id)}
+              onRemove={() => askRemove(p)}
+            />
+          ))}
+        </>
       )}
 
       <View style={styles.actions}>
@@ -173,7 +217,7 @@ export function RoostScreen({
             <Card key={p.id}>
               <View style={styles.row}>
                 <View style={styles.mark}>
-                  <PigeonMark variant={p.variant} size={30} />
+                  <PigeonMark variant={p.variant} size={30} band={bandFor(p)} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{p.name}</Text>
@@ -208,7 +252,7 @@ export function RoostScreen({
               <Card key={p.id}>
                 <View style={styles.row}>
                   <View style={styles.mark}>
-                    <PigeonMark variant={p.variant} size={30} />
+                    <PigeonMark variant={p.variant} size={30} band={bandFor(p)} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.name}>{p.name}</Text>
@@ -237,7 +281,7 @@ export function RoostScreen({
               <Card key={p.id} style={styles.goneCard}>
                 <View style={styles.row}>
                   <View style={[styles.mark, styles.faded]}>
-                    <PigeonMark variant={p.variant} size={30} />
+                    <PigeonMark variant={p.variant} size={30} band={bandFor(p)} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.name}>{p.name}</Text>
@@ -328,7 +372,11 @@ function HerePigeon({
     <Card style={health === 'weak' ? styles.weakCard : undefined}>
       <View style={styles.row}>
         <View style={styles.mark}>
-          <PigeonMark variant={pigeon.variant} size={30} />
+          <PigeonMark
+            variant={pigeon.variant}
+            size={30}
+            band={bandFor(pigeon)}
+          />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>{pigeon.name}</Text>
@@ -381,7 +429,11 @@ function PigeonActions({
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
-          <PigeonMark variant={pigeon.variant} size={62} />
+          <PigeonMark
+            variant={pigeon.variant}
+            size={62}
+            band={bandFor(pigeon)}
+          />
           <Text style={styles.sheetName}>{pigeon.name}</Text>
           <Muted style={{ textAlign: 'center', marginTop: 4 }}>
             {pigeon.mine
