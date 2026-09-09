@@ -183,8 +183,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     async (pigeon: Pigeon): Promise<string | undefined> => {
       if (!stateRef.current.settings.notify) return undefined;
       return scheduleArrival(
-        `${pigeon.name}が弱ってきました`,
-        '鳩舎をのぞいて、世話をしてください。',
+        `${pigeon.name}が腹を空かせています`,
+        '鳩舎をのぞいて、餌をやってください。',
         pigeon.fedAt + CARE.weak
       );
     },

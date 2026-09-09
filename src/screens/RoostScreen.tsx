@@ -15,12 +15,10 @@ import { Pigeon } from '../types';
 import { formatDateTime, formatDistance, formatDuration, distanceKm } from '../geo';
 import {
   healthOf,
-  HEALTH_LABEL,
   letterStatus,
   LOFT_CAPACITY,
   pigeonStatus,
   pigeonTrips,
-  starvesAt,
   STATUS_LABEL,
 } from '../flock';
 import { PigeonMark, PLUMAGES } from '../pigeonArt';
@@ -28,6 +26,7 @@ import { useNow } from '../useNow';
 import { radius, theme } from '../theme';
 import { Button, Card, Empty, Muted, SectionTitle } from '../components/ui';
 import { Loft } from '../components/Loft';
+import { HungerGauge } from '../components/HungerGauge';
 import { QrView } from '../components/QrView';
 import { flyAway } from '../flyaway';
 import { encodePigeon } from '../pigeonCode';
@@ -73,7 +72,7 @@ export function RoostScreen({
         {groups.here.length > 0
           ? `${groups.here.length}羽が手元にいます`
           : '手元に鳩がいません'}
-        {needsCare > 0 ? `・${needsCare}羽が世話を待っています` : ''}
+        {needsCare > 0 ? `・${needsCare}羽が腹を空かせています` : ''}
         {nestsFree <= 0 ? '・巣箱に空きがありません' : ''}
       </Text>
 
@@ -276,7 +275,6 @@ function HerePigeon({
   onWrite: () => void;
 }) {
   const health = healthOf(pigeon, now);
-  const left = starvesAt(pigeon) - now;
 
   return (
     <Card style={health === 'weak' ? styles.weakCard : undefined}>
@@ -294,19 +292,7 @@ function HerePigeon({
         </View>
       </View>
 
-      <Text
-        style={[
-          styles.health,
-          health === 'fine' ? styles.healthFine : styles.healthBad,
-        ]}
-      >
-        {HEALTH_LABEL[health]}
-        {health === 'fine'
-          ? now - pigeon.fedAt < 60000
-            ? '・世話をしたところ'
-            : `・最後の世話から${formatDuration(now - pigeon.fedAt)}`
-          : `・あと${formatDuration(left)}で死んでしまいます`}
-      </Text>
+      <HungerGauge pigeon={pigeon} now={now} />
 
       <View style={styles.actions}>
         {pigeon.mine ? (
@@ -339,8 +325,6 @@ function PigeonActions({
   onWrite: () => void;
 }) {
   if (!pigeon) return null;
-  const health = healthOf(pigeon, now);
-  const left = starvesAt(pigeon) - now;
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -353,18 +337,9 @@ function PigeonActions({
               ? 'あなたの鳩'
               : `${pigeon.ownerName}さんの鳩・${pigeon.loft.name}へ帰ります`}
           </Muted>
-          <Text
-            style={[
-              styles.health,
-              health === 'fine' ? styles.healthFine : styles.healthBad,
-              { textAlign: 'center' },
-            ]}
-          >
-            {HEALTH_LABEL[health]}
-            {health === 'fine'
-              ? ''
-              : `・あと${formatDuration(left)}で死んでしまいます`}
-          </Text>
+          <View style={{ alignSelf: 'stretch' }}>
+            <HungerGauge pigeon={pigeon} now={now} />
+          </View>
 
           <Button
             label={pigeon.mine ? '誰かに渡す' : '手紙を持たせる'}
@@ -602,9 +577,6 @@ const styles = StyleSheet.create({
   mark: { width: 34, marginRight: 12, alignItems: 'center' },
   faded: { opacity: 0.35 },
   name: { fontSize: 16, color: theme.ink, fontWeight: '600' },
-  health: { fontSize: 13, marginTop: 12 },
-  healthFine: { color: theme.good },
-  healthBad: { color: '#A03E5B' },
   weakCard: { borderColor: '#A03E5B' },
   goneCard: { backgroundColor: theme.paperDeep, borderStyle: 'dashed' },
   actions: { flexDirection: 'row', gap: 10, marginTop: 12 },

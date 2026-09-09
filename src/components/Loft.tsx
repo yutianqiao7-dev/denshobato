@@ -11,8 +11,9 @@ import {
 } from 'react-native';
 import Svg, { Circle, Ellipse, Path, Rect } from 'react-native-svg';
 import { Pigeon } from '../types';
-import { Health, healthOf, LOFT_CAPACITY } from '../flock';
+import { fullnessOf, Health, healthOf, LOFT_CAPACITY } from '../flock';
 import { PigeonFlyer, PigeonMark, Pose } from '../pigeonArt';
+import { HUNGER_COLOR } from './HungerGauge';
 import { theme } from '../theme';
 
 const NATIVE = Platform.OS !== 'web';
@@ -241,6 +242,11 @@ export function Loft({
           />
         ))}
 
+        {/* 巣箱の縁に出す、その一羽の腹の減り具合 */}
+        {housed.map((pigeon, i) => (
+          <NestGauge key={`g-${pigeon.id}`} pigeon={pigeon} now={now} slot={SLOTS[i]} />
+        ))}
+
         {/* 撒かれた餌 */}
         {crumbs && SLOTS[crumbs.slot] && (
           <Crumbs
@@ -286,6 +292,47 @@ export function Loft({
           <GrainPinch size={44} />
         </View>
       )}
+    </View>
+  );
+}
+
+/** 巣箱の縁の細いゲージ。誰が腹を空かせているか、鳩舎を見れば分かる */
+function NestGauge({
+  pigeon,
+  now,
+  slot,
+}: {
+  pigeon: Pigeon;
+  now: number;
+  slot: (typeof SLOTS)[number];
+}) {
+  const value = fullnessOf(pigeon, now);
+  const health = healthOf(pigeon, now);
+  const x = cellX(slot.col) + 4;
+  const barW = CELL_W - 8;
+
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: pct(x, W),
+        top: pct(slot.floorY + 2, H),
+        width: pct(barW, W),
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: 'rgba(60,40,20,0.28)',
+        overflow: 'hidden',
+      }}
+    >
+      <View
+        style={{
+          width: `${Math.round(value * 1000) / 10}%` as `${number}%`,
+          height: '100%',
+          borderRadius: 2,
+          backgroundColor: HUNGER_COLOR[health],
+        }}
+      />
     </View>
   );
 }

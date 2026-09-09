@@ -49,6 +49,16 @@ export function healthOf(pigeon: Pigeon, now: number): Health {
   return 'fine';
 }
 
+/**
+ * 満腹の度合い。1 が満腹、0 で力尽きる。
+ * 餌をやってからの時間だけで決まるので、時計から引くだけで求まる。
+ */
+export function fullnessOf(pigeon: Pigeon, now: number): number {
+  if (pigeon.diedAt !== undefined) return 0;
+  const left = starvesAt(pigeon) - now;
+  return Math.max(0, Math.min(1, left / CARE.death));
+}
+
 /** 世話が絶えて死ぬ時刻 */
 export function starvesAt(pigeon: Pigeon): number {
   return pigeon.fedAt + CARE.death;

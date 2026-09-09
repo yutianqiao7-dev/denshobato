@@ -122,7 +122,7 @@ export function SettingsScreen() {
         <View style={styles.switchRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.contactName}>知らせる</Text>
-            <Muted>鳩の到着と、世話が要るときに通知します。</Muted>
+            <Muted>鳩の到着と、餌が要るときに通知します。</Muted>
           </View>
           <Switch
             value={state.settings.notify}
