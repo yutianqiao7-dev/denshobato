@@ -121,6 +121,15 @@ export function Loft({
   const [crumbs, setCrumbs] = useState<{ slot: number; key: number } | null>(
     null
   );
+  /** 餌を手に持っているか。持っているあいだは、鳩をつつくと食べる */
+  const [holding, setHolding] = useState(false);
+
+  const feed = (index: number) => {
+    const pigeon = housed[index];
+    if (!pigeon) return;
+    onFeed(pigeon);
+    setCrumbs({ slot: index, key: Date.now() });
+  };
 
   /** 画面上の座標が、どの鳩の上か */
   const hitTest = (pageX: number, pageY: number) => {
@@ -156,10 +165,7 @@ export function Loft({
           const hit = hitTest(g.moveX, g.moveY);
           setGrain(null);
           setTarget(null);
-          if (hit !== null && housed[hit]) {
-            onFeed(housed[hit]);
-            setCrumbs({ slot: hit, key: Date.now() });
-          }
+          if (hit !== null) feed(hit);
         },
         onPanResponderTerminate: () => {
           setGrain(null);
@@ -248,8 +254,12 @@ export function Loft({
             pigeon={pigeon}
             now={now}
             slot={SLOTS[i]}
-            targeted={target === i}
-            onPress={() => onSelect(pigeon)}
+            targeted={
+              target === i ||
+              // 持っているあいだは、腹の減った鳩だけを光らせて案内する
+              (holding && fullnessOf(pigeon, now) < 0.75)
+            }
+            onPress={() => (holding ? feed(i) : onSelect(pigeon))}
           />
         ))}
 
@@ -297,13 +307,21 @@ export function Loft({
       </View>
 
       <View style={styles.trayRow}>
-        <View style={styles.tray} {...pan.panHandlers}>
-          <FeedBowl size={54} />
-        </View>
+        <Pressable
+          onPress={() => setHolding((v) => !v)}
+          style={[styles.tray, holding && styles.trayHolding]}
+          {...pan.panHandlers}
+        >
+          <FeedBowl size={62} />
+        </Pressable>
         <View style={{ flex: 1 }}>
-          <Text style={styles.trayTitle}>餌</Text>
-          <Text style={styles.trayHint}>
-            つまんで、鳩の上まで持っていくと食べます
+          <Text style={styles.trayTitle}>
+            {holding ? '餌を持っています' : '餌'}
+          </Text>
+          <Text style={[styles.trayHint, holding && styles.trayHintOn]}>
+            {holding
+              ? '鳩をつつくと食べます。器をもう一度押すと置きます'
+              : '器を押して持つか、つまんで鳩まで運びます'}
           </Text>
           <Text style={styles.count}>
             巣箱 {housed.length} / {LOFT_CAPACITY}
@@ -319,7 +337,7 @@ export function Loft({
             styles.heldGrain,
             {
               left: grain.x - frame.current.x - 22,
-              top: grain.y - frame.current.y - 22,
+              top: grain.y - frame.current.y - 62,
             },
           ]}
         >
@@ -704,12 +722,17 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   tray: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
     backgroundColor: theme.card,
     borderWidth: 1,
     borderColor: theme.line,
+  },
+  trayHolding: {
+    borderColor: theme.accent,
+    borderWidth: 2,
+    backgroundColor: '#FBF1DD',
   },
   trayTitle: {
     fontSize: 13,
@@ -717,7 +740,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 2,
   },
-  trayHint: { fontSize: 12, color: theme.inkSoft, marginTop: 2 },
+  trayHint: { fontSize: 12, color: theme.inkSoft, marginTop: 2, lineHeight: 18 },
+  trayHintOn: { color: theme.accent },
   count: {
     color: theme.inkFaint,
     fontSize: 12,
