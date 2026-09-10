@@ -6,4 +6,4 @@
  *
  * 例: 'https://denshobato-default-rtdb.asia-southeast1.firebasedatabase.app'
  */
-export const RELAY_URL = '';
+export const RELAY_URL = 'https://hato-d4898-default-rtdb.firebaseio.com';

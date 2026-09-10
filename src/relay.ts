@@ -26,7 +26,8 @@ export function newMailbox(): string {
   return out;
 }
 
-const nest = (mailbox: string) => `${base}/mailboxes/${mailbox}/letters`;
+/** 巣穴。ここに手紙が置かれる（firebase-rules.json のパスと合わせてある） */
+const nest = (mailbox: string) => `${base}/mailboxes/${mailbox}`;
 
 /** 相手の巣穴に手紙を置く */
 export async function postLetter(
