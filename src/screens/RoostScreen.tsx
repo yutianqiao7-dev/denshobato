@@ -475,7 +475,7 @@ function GivePigeon({
   pigeon: Pigeon | null;
   onClose: () => void;
 }) {
-  const { state, givePigeon } = useStore();
+  const { state, givePigeon, relay } = useStore();
   /** QR を見せている段階か、渡し終えて相手を書き留める段階か */
   const [step, setStep] = useState<'qr' | 'who'>('qr');
   const [showCode, setShowCode] = useState(false);
@@ -483,7 +483,7 @@ function GivePigeon({
   if (!pigeon) return null;
 
   const alreadyLent = pigeon.custody.kind === 'lent';
-  const code = encodePigeon(pigeon, state.myName);
+  const code = encodePigeon(pigeon, state.myName, state.mailbox);
 
   const close = () => {
     setStep('qr');
@@ -526,6 +526,9 @@ function GivePigeon({
               <Muted style={{ marginTop: 16 }}>
                 {pigeon.name}は{state.home?.name ?? 'あなたの鳩舎'}
                 へ帰る鳩です。相手がこの鳩を放つと、手紙を持ってあなたのところへ帰ってきます。
+                {relay
+                  ? 'この QR にはあなたの巣穴の住所も入っているので、以降は読み取りなしで届きます。'
+                  : ''}
               </Muted>
 
               {!alreadyLent && (

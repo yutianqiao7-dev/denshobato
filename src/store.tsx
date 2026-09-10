@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { AppState as RNAppState } from 'react-native';
 import { AppState, Contact, Letter, Pigeon, Place } from './types';
 import { emptyState, loadState, saveState } from './storage';
 import {
@@ -29,7 +30,13 @@ import {
 import { PLUMAGES } from './pigeonArt';
 import { PIGEON_EMOJI, PIGEON_NAMES, RING_COLORS } from './cities';
 import { cancelArrival, scheduleArrival } from './notify';
-import { codeKind, decodeLetter, decodePigeon } from './pigeonCode';
+import { codeKind, decodeLetter, decodePigeon, encodeLetter } from './pigeonCode';
+import {
+  clearLetter,
+  fetchLetters,
+  postLetter,
+  relayEnabled,
+} from './relay';
 
 const newId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -82,6 +89,8 @@ type Store = {
   markRead: (letterId: string) => void;
   /** 手紙の QR を相手に読んでもらった */
   markHandedOver: (letterId: string) => void;
+  /** 中継所を使っているか */
+  relay: boolean;
   removeLetter: (letterId: string) => void;
   removePigeon: (pigeonId: string) => void;
   setSpeed: (kmh: number) => void;
@@ -164,6 +173,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }, 30000);
     return () => clearInterval(timer);
   }, [loaded]);
+
 
   useEffect(() => {
     if (loaded) saveState(state);
@@ -425,7 +435,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               );
       }
 
-      const stored = { ...letter, notificationId };
+      // 中継所を知っている鳩なら、そのまま相手の巣穴へ置く。
+      // 置けたなら、相手は何もしなくても受け取れる
+      const delivered =
+        relayEnabled() && pigeon.mailbox
+          ? await postLetter(
+              pigeon.mailbox,
+              letter.id,
+              encodeLetter(letter, s.myName)
+            )
+          : false;
+
+      const stored = { ...letter, notificationId, handedOver: delivered };
       setState((prev) => ({
         ...prev,
         letters: [stored, ...prev.letters],
@@ -491,6 +512,58 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  /**
+   * 自分の巣穴に届いているものを取り込む。
+   * 相手が放った時点で置かれているので、こちらは開くだけでいい。
+   */
+  const syncMailbox = useCallback(async () => {
+    const s = stateRef.current;
+    if (!relayEnabled() || !s.mailbox) return;
+
+    const found = await fetchLetters(s.mailbox);
+    if (found.length === 0) return;
+
+    for (const item of found) {
+      const decoded = decodeLetter(item.code);
+      // 読めないものと、すでに持っているものは、巣穴から下げるだけ
+      if (decoded && !stateRef.current.letters.some((l) => l.id === decoded.id)) {
+        let notificationId: string | undefined;
+        if (
+          stateRef.current.settings.notify &&
+          decoded.lostAt === undefined &&
+          decoded.arrivesAt > Date.now()
+        ) {
+          notificationId = await scheduleArrival(
+            `${decoded.pigeonName}が帰ってきます`,
+            `${decoded.peerName}さんからの手紙が届きました。`,
+            decoded.arrivesAt
+          );
+        }
+        const letter = { ...decoded, notificationId };
+        setState((prev) =>
+          prev.letters.some((l) => l.id === letter.id)
+            ? prev
+            : { ...prev, letters: [letter, ...prev.letters] }
+        );
+      }
+      clearLetter(s.mailbox, item.id);
+    }
+  }, []);
+
+  // 巣穴を見にいく。開いた直後と、開いているあいだ
+  useEffect(() => {
+    if (!loaded || !relayEnabled()) return;
+    syncMailbox();
+    const timer = setInterval(syncMailbox, 60000);
+    const sub = RNAppState.addEventListener('change', (next) => {
+      if (next === 'active') syncMailbox();
+    });
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, [loaded, syncMailbox]);
+
   const markHandedOver = useCallback((letterId: string) => {
     setState((s) => ({
       ...s,
@@ -552,6 +625,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       receiveCode,
       markRead,
       markHandedOver,
+      relay: relayEnabled(),
       removeLetter,
       removePigeon,
       setSpeed,

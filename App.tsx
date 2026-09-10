@@ -156,11 +156,12 @@ function Main() {
           setComposing(false);
           setDraft(null);
           setTab('sky');
-          // 放った鳩が飛び去るのを見せてから、相手へ渡すところへ進む。
-          // ここを渡さないと相手には届かないので、素通りさせない。
-          flyAway(letter.pigeonVariant ?? variantFor(letter.pigeonId), () =>
-            setHandover(letter)
-          );
+          // 中継所に置けた手紙は、相手が何もしなくても届く。
+          // 置けなかったときだけ、QR で手渡しするところへ進む。
+          flyAway(letter.pigeonVariant ?? variantFor(letter.pigeonId), () => {
+            if (letter.handedOver) setNotice(noticeForLetter(letter));
+            else setHandover(letter);
+          });
         }}
         onNeedPigeon={() => setTab('roost')}
       />

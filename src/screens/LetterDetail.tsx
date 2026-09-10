@@ -178,6 +178,13 @@ export function LetterDetail({
             </View>
           )}
 
+          {outbound && live.handedOver && status !== 'lost' && (
+            <Muted style={{ marginTop: 20, textAlign: 'center' }}>
+              {live.peerName}さんの巣穴に置きました。相手は何もしなくても、
+              着く時刻になれば読めます。
+            </Muted>
+          )}
+
           {outbound && status === 'lost' && (
             <Button
               label="同じ文面で書き直す"
@@ -187,7 +194,7 @@ export function LetterDetail({
             />
           )}
 
-          {outbound && status !== 'lost' && (
+          {outbound && status !== 'lost' && !live.handedOver && (
             <View style={{ marginTop: 24 }}>
               {!live.handedOver && (
                 <Text style={styles.notHanded}>

@@ -40,6 +40,11 @@ export type Pigeon = {
   /** 帰る場所 */
   loft: Place;
   custody: Custody;
+  /**
+   * この鳩の飼い主の巣穴の住所。鳩コードで渡ってくる。
+   * これがあると、放った手紙は中継所を通って飼い主に自動で届く。
+   */
+  mailbox?: string;
   /** 最後に世話をした時刻。手元にいる間だけ意味を持つ */
   fedAt: number;
   /** 世話が絶えて死んだ時刻 */
@@ -100,6 +105,8 @@ export type AppState = {
   version: number;
   /** 差出人としての自分の名前 */
   myName: string;
+  /** 自分の巣穴の住所。鳩を渡すときに相手へ伝わる */
+  mailbox: string;
   /** 自分の鳩舎。自分の鳩はここへ帰ってくる */
   home: Place | null;
   pigeons: Pigeon[];

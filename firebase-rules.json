@@ -1,0 +1,13 @@
+{
+  "rules": {
+    "mailboxes": {
+      "$mailbox": {
+        ".read": "$mailbox.length >= 24",
+        "$letter": {
+          ".write": "$mailbox.length >= 24 && (!data.exists() || !newData.exists())",
+          ".validate": "newData.hasChildren(['code','at']) && newData.child('code').isString() && newData.child('code').val().length <= 20000 && newData.child('at').isNumber()"
+        }
+      }
+    }
+  }
+}

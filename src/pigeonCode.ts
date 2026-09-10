@@ -137,10 +137,16 @@ type PigeonPayload = {
   variant?: string;
   owner: string;
   loft: Place;
+  /** 飼い主の巣穴の住所 */
+  mb?: string;
 };
 
 /** 自分の鳩を相手に預けるためのコード */
-export function encodePigeon(pigeon: Pigeon, ownerName: string): string {
+export function encodePigeon(
+  pigeon: Pigeon,
+  ownerName: string,
+  mailbox?: string
+): string {
   const payload: PigeonPayload = {
     v: 1,
     id: pigeon.id,
@@ -149,6 +155,7 @@ export function encodePigeon(pigeon: Pigeon, ownerName: string): string {
     variant: pigeon.variant,
     owner: ownerName || '名もなき飼い主',
     loft: pigeon.loft,
+    mb: mailbox,
   };
   return pack(PIGEON_PREFIX, payload);
 }
@@ -167,6 +174,7 @@ export function decodePigeon(code: string, now: number): Pigeon | null {
     ownerName: payload.owner || '名もなき飼い主',
     loft: payload.loft,
     custody: { kind: 'here' },
+    mailbox: payload.mb,
     fedAt: now,
   };
 }
