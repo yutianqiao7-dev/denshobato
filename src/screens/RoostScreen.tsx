@@ -14,15 +14,20 @@ import { Pigeon } from '../types';
 
 import { formatDateTime, formatDistance, formatDuration, distanceKm } from '../geo';
 import {
+  canBreed,
+  GROWTH,
+  growthLeft,
   healthOf,
   letterStatus,
   LOFT_CAPACITY,
   pigeonStatus,
   PigeonStatus,
   pigeonTrips,
+  stageOf,
+  STAGE_LABEL,
   STATUS_LABEL,
 } from '../flock';
-import { PigeonMark, PLUMAGES } from '../pigeonArt';
+import { EggMark, PigeonMark, PLUMAGES, SquabMark } from '../pigeonArt';
 import { RING_COLORS } from '../cities';
 import { useNow } from '../useNow';
 import { radius, theme } from '../theme';
@@ -76,13 +81,21 @@ export function RoostScreen({
   onWrite: (pigeonId: string) => void;
   onReceive: () => void;
 }) {
-  const { state, takeInPigeon, feedPigeon, removePigeon, nestsFree } =
-    useStore();
+  const {
+    state,
+    takeInPigeon,
+    breed,
+    canTakeStray,
+    feedPigeon,
+    removePigeon,
+    nestsFree,
+  } = useStore();
   const now = useNow(15000);
   const [giving, setGiving] = useState<Pigeon | null>(null);
   const [borrowing, setBorrowing] = useState(false);
   const [acting, setActing] = useState<Pigeon | null>(null);
   const [taken, setTaken] = useState<Pigeon | null>(null);
+  const [pairing, setPairing] = useState(false);
 
   const askRemove = (pigeon: Pigeon) => {
     confirmDestructive(
@@ -110,6 +123,8 @@ export function RoostScreen({
 
   const mine = groups.here.filter((p) => p.mine);
   const borrowed = groups.here.filter((p) => !p.mine);
+
+  const breeders = groups.here.filter((p) => canBreed(p, now));
 
   const needsCare = groups.here.filter(
     (p) => healthOf(p, now) !== 'fine'
@@ -186,10 +201,10 @@ export function RoostScreen({
 
       <View style={styles.actions}>
         <Button
-          label="新しい鳩を迎える"
+          label="つがいにする"
           tone="quiet"
-          disabled={nestsFree <= 0}
-          onPress={() => takeInPigeon()}
+          disabled={nestsFree <= 0 || breeders.length < 2}
+          onPress={() => setPairing(true)}
           style={{ flex: 1 }}
         />
         <Button
@@ -200,7 +215,21 @@ export function RoostScreen({
           style={{ flex: 1 }}
         />
       </View>
+      {canTakeStray && (
+        <Button
+          label="野良鳩を迎える"
+          onPress={() => takeInPigeon()}
+          style={{ marginTop: 10 }}
+        />
+      )}
       <Muted style={{ marginTop: 10 }}>
+        {canTakeStray
+          ? 'つがいを組める鳩がいません。野良鳩が一羽、迷い込んできています。'
+          : breeders.length >= 2
+            ? '鳩は卵からしか増えません。元気な成鳥を二羽えらぶと、卵をひとつ持ちます。'
+            : '卵を持てるのは、元気な成鳥が二羽そろっているときだけです。'}
+      </Muted>
+      <Muted style={{ marginTop: 8 }}>
         {nestsFree > 0
           ? `巣箱は${LOFT_CAPACITY}個。あと${nestsFree}羽まで置けます。`
           : `巣箱は${LOFT_CAPACITY}個で埋まっています。誰かに渡すか、放つと空きます。`}
@@ -334,6 +363,16 @@ export function RoostScreen({
         pigeon={giving}
         onClose={() => setGiving(null)}
       />
+      <PairUp
+        visible={pairing}
+        breeders={breeders}
+        onClose={() => setPairing(false)}
+        onPair={(a, b) => {
+          const egg = breed(a, b);
+          setPairing(false);
+          if (egg) setTaken(egg);
+        }}
+      />
       <BorrowPigeon
         visible={borrowing}
         onClose={() => setBorrowing(false)}
@@ -367,30 +406,56 @@ function HerePigeon({
   onRemove: () => void;
 }) {
   const health = healthOf(pigeon, now);
+  const stage = stageOf(pigeon, now);
 
   return (
     <Card style={health === 'weak' ? styles.weakCard : undefined}>
       <View style={styles.row}>
         <View style={styles.mark}>
-          <PigeonMark
-            variant={pigeon.variant}
-            size={30}
-            band={bandFor(pigeon)}
-          />
+          {stage === 'egg' ? (
+            <EggMark size={30} />
+          ) : stage === 'squab' ? (
+            <SquabMark variant={pigeon.variant} size={30} />
+          ) : (
+            <PigeonMark
+              variant={pigeon.variant}
+              size={30}
+              band={bandFor(pigeon)}
+            />
+          )}
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.name}>{pigeon.name}</Text>
+          <Text style={styles.name}>
+            {pigeon.name}
+            {stage !== 'adult' ? `（${STAGE_LABEL[stage]}）` : ''}
+          </Text>
           <Muted>
-            {pigeon.mine
-              ? `あなたの鳩・${homeName ?? '鳩舎'}へ帰ります`
-              : `${pigeon.ownerName}さんの鳩・${pigeon.loft.name}へ帰ります`}
+            {pigeon.parents
+              ? `${pigeon.parents[0]}と${pigeon.parents[1]}の子`
+              : pigeon.mine
+                ? `あなたの鳩・${homeName ?? '鳩舎'}へ帰ります`
+                : `${pigeon.ownerName}さんの鳩・${pigeon.loft.name}へ帰ります`}
           </Muted>
         </View>
         <RemoveLink onPress={onRemove} />
       </View>
 
-      <HungerGauge pigeon={pigeon} now={now} />
+      {stage === 'egg' ? (
+        <Text style={styles.growth}>
+          あと {formatDuration(growthLeft(pigeon, now))} で孵ります
+        </Text>
+      ) : (
+        <HungerGauge pigeon={pigeon} now={now} />
+      )}
 
+      {stage === 'squab' && (
+        <Text style={styles.growth}>
+          あと {formatDuration(growthLeft(pigeon, now))} で巣立ちます。
+          それまでは飛べません
+        </Text>
+      )}
+
+      {stage === 'adult' && (
       <View style={styles.actions}>
         {pigeon.mine ? (
           <Button label="誰かに渡す" tone="quiet" onPress={onGive} style={{ flex: 1 }} />
@@ -403,6 +468,7 @@ function HerePigeon({
           />
         )}
       </View>
+      )}
     </Card>
   );
 }
@@ -600,6 +666,95 @@ function GivePigeon({
   );
 }
 
+/** 二羽をつがいにして、卵を持たせる */
+function PairUp({
+  visible,
+  breeders,
+  onClose,
+  onPair,
+}: {
+  visible: boolean;
+  breeders: Pigeon[];
+  onClose: () => void;
+  onPair: (aId: string, bId: string) => void;
+}) {
+  const [chosen, setChosen] = useState<string[]>([]);
+
+  const toggle = (id: string) => {
+    setChosen((prev) =>
+      prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : prev.length >= 2
+          ? [prev[1], id]
+          : [...prev, id]
+    );
+  };
+
+  const close = () => {
+    setChosen([]);
+    onClose();
+  };
+
+  const hours = Math.round((GROWTH.egg + GROWTH.squab) / 3600000);
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={close}>
+      <View style={{ flex: 1, backgroundColor: theme.paper }}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>つがいにする</Text>
+          <Pressable onPress={close} hitSlop={12}>
+            <Text style={styles.close}>やめる</Text>
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 20 }}>
+          <Muted style={{ marginBottom: 16 }}>
+            二羽えらぶと、巣箱にひとつ卵を持ちます。孵って巣立つまで
+            {hours}時間。羽色は親のどちらかを継ぎ、たまに先祖返りします。
+            親はしばらく次の卵を持てません。
+          </Muted>
+
+          {breeders.length < 2 ? (
+            <Muted>
+              元気な成鳥が二羽そろっていません。卵と雛、腹を空かせた鳩、
+              預かっている鳩は親になれません。
+            </Muted>
+          ) : (
+            <View style={styles.chips}>
+              {breeders.map((p) => {
+                const on = chosen.includes(p.id);
+                return (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => toggle(p.id)}
+                    style={[styles.pairChip, on && styles.chipOn]}
+                  >
+                    <PigeonMark variant={p.variant} size={34} />
+                    <Text style={[styles.chipText, on && styles.chipTextOn]}>
+                      {p.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          <Button
+            label={
+              chosen.length === 2
+                ? '巣を作らせる'
+                : `あと${2 - chosen.length}羽えらぶ`
+            }
+            onPress={() => chosen.length === 2 && onPair(chosen[0], chosen[1])}
+            disabled={chosen.length !== 2}
+            style={{ marginTop: 26 }}
+          />
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
 /**
  * 相手の鳩を預かる。
  * ふつうは相手の QR を読む。読めないときのために、手で書き留める道もある。
@@ -781,6 +936,7 @@ const styles = StyleSheet.create({
   goneCard: { backgroundColor: theme.paperDeep, borderStyle: 'dashed' },
   actions: { flexDirection: 'row', gap: 10, marginTop: 12 },
   remove: { color: '#A03E5B', fontSize: 13 },
+  growth: { fontSize: 13, color: theme.inkSoft, marginTop: 12, lineHeight: 20 },
   error: { color: '#A03E5B', fontSize: 13, marginTop: 12, textAlign: 'center' },
   label: {
     fontSize: 12,
@@ -812,6 +968,16 @@ const styles = StyleSheet.create({
   chipText: { color: theme.ink, fontSize: 15 },
   chipPlace: { color: theme.inkFaint, fontSize: 11, marginTop: 2 },
   chipTextOn: { color: theme.paper },
+  pairChip: {
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: theme.card,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: theme.line,
+  },
   plumage: {
     paddingVertical: 6,
     paddingHorizontal: 8,

@@ -292,6 +292,76 @@ function Fluffed({ p }: { p: Plumage }) {
   );
 }
 
+/** 巣にある卵。藁の上にふたつ */
+export function EggMark({ size }: { size?: number }) {
+  const w = size === undefined ? '100%' : size;
+  const h = size === undefined ? '100%' : (size * 40) / 48;
+  return (
+    <Svg width={w} height={h} viewBox="0 0 48 40">
+      {/* 巣の藁 */}
+      <Ellipse cx="24" cy="31" rx="15" ry="5.4" fill="#A98A5C" />
+      <Ellipse cx="24" cy="30" rx="12.5" ry="4" fill="#C4A870" />
+      <Path
+        d="M 10 31 Q 17 27 24 30 Q 31 27 38 31"
+        stroke="#8E7042"
+        strokeWidth="1.4"
+        fill="none"
+        strokeLinecap="round"
+      />
+      {/* 卵 */}
+      <Ellipse cx="20" cy="25.5" rx="6" ry="7.6" fill="#F6F1E6" />
+      <Ellipse cx="18.6" cy="23.4" rx="2.2" ry="3" fill="#FFFDF7" opacity={0.9} />
+      <Ellipse cx="28.6" cy="26.4" rx="5.6" ry="7.1" fill="#EFE8DA" />
+      <Ellipse cx="27.4" cy="24.6" rx="2" ry="2.7" fill="#FBF7EE" opacity={0.85} />
+    </Svg>
+  );
+}
+
+/** 雛。綿毛だらけで、まだ飛べない */
+export function SquabMark({
+  variant,
+  size,
+  flip = false,
+}: {
+  variant?: string;
+  size?: number;
+  flip?: boolean;
+}) {
+  const p = plumage(variant);
+  const w = size === undefined ? '100%' : size;
+  const h = size === undefined ? '100%' : (size * 40) / 48;
+  return (
+    <Svg width={w} height={h} viewBox="0 0 48 40">
+      <G transform={flip ? 'translate(48,0) scale(-1,1)' : undefined}>
+        {/* 綿毛。輪郭をぼかす */}
+        <Ellipse cx="24" cy="27" rx="12" ry="9.6" fill="#E8D9B8" opacity={0.75} />
+        {/* 胴 */}
+        <Ellipse cx="24" cy="27.5" rx="10" ry="8" fill={p.back} />
+        <Ellipse cx="29" cy="28.5" rx="5.4" ry="6" fill={p.breast} />
+        {/* 大きな頭 */}
+        <Circle cx="31" cy="19.5" r="6.4" fill={p.head} />
+        <Ellipse cx="31" cy="14.6" rx="5" ry="3" fill="#E8D9B8" opacity={0.8} />
+        {/* 太くて短いくちばし */}
+        <Path d="M 36.4 19 L 41 20.4 L 36.4 22 Z" fill={BEAK} />
+        <Ellipse cx="36" cy="17.4" rx="2.2" ry="1.5" fill={CERE} />
+        {/* 目。雛は瞳が大きい */}
+        <Circle cx="32.4" cy="18.4" r="2.2" fill={PUPIL} />
+        <Circle cx="33.1" cy="17.7" r="0.8" fill="#FFFFFF" opacity={0.85} />
+        {/* まだ短い翼 */}
+        <Path
+          d="M 15 23.6 Q 23 20.6 29 24.4 Q 27 30.6 20 31.4 Q 15 29.4 15 23.6 Z"
+          fill={p.wing}
+        />
+        {/* 脚 */}
+        <Path d="M 22 34.4 L 21.4 36.6" stroke={FOOT} strokeWidth="1.6" strokeLinecap="round" />
+        <Path d="M 26.4 34.4 L 27 36.6" stroke={FOOT} strokeWidth="1.6" strokeLinecap="round" />
+        <Path d="M 19.4 37 L 23.2 37" stroke={FOOT} strokeWidth="1.4" strokeLinecap="round" />
+        <Path d="M 25.2 37 L 29 37" stroke={FOOT} strokeWidth="1.4" strokeLinecap="round" />
+      </G>
+    </Svg>
+  );
+}
+
 /** 飛んでいる鳩。翼を上げた形と下げた形を切り替えて羽ばたかせる */
 export function PigeonFlyer({
   variant,

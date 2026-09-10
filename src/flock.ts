@@ -20,6 +20,52 @@ export const LOFT_CAPACITY = 10;
 
 const HOUR = 3600 * 1000;
 
+/** 卵から巣立ちまで */
+export const GROWTH = {
+  /** 孵るまで */
+  egg: 24 * HOUR,
+  /** 巣立つまで */
+  squab: 24 * HOUR,
+  /** 次に卵を持てるようになるまで */
+  cooldown: 5 * 24 * HOUR,
+};
+
+export type Stage = 'egg' | 'squab' | 'adult';
+
+export const STAGE_LABEL: Record<Stage, string> = {
+  egg: '卵',
+  squab: '雛',
+  adult: '成鳥',
+};
+
+/** 卵か、雛か、成鳥か。時刻から決まる */
+export function stageOf(pigeon: Pigeon, now: number): Stage {
+  if (pigeon.hatchesAt === undefined) return 'adult';
+  if (now < pigeon.hatchesAt) return 'egg';
+  if (pigeon.fledgesAt !== undefined && now < pigeon.fledgesAt) return 'squab';
+  return 'adult';
+}
+
+/** 育ちきるまでの残り。成鳥なら 0 */
+export function growthLeft(pigeon: Pigeon, now: number): number {
+  const stage = stageOf(pigeon, now);
+  if (stage === 'egg') return (pigeon.hatchesAt ?? now) - now;
+  if (stage === 'squab') return (pigeon.fledgesAt ?? now) - now;
+  return 0;
+}
+
+/** 卵を持てる鳩か。成鳥で、元気で、手元にいて、続けざまでないこと */
+export function canBreed(pigeon: Pigeon, now: number): boolean {
+  return (
+    pigeon.mine &&
+    pigeon.diedAt === undefined &&
+    pigeon.custody.kind === 'here' &&
+    stageOf(pigeon, now) === 'adult' &&
+    healthOf(pigeon, now) === 'fine' &&
+    (pigeon.bredAt === undefined || now - pigeon.bredAt >= GROWTH.cooldown)
+  );
+}
+
 /** 世話をしないとこうなる、の目安 */
 export const CARE = {
   /** これを過ぎると腹をすかせる */
@@ -39,9 +85,10 @@ export const HEALTH_LABEL: Record<Health, string> = {
   dead: '死んでしまった',
 };
 
-/** 手元にいる鳩の、いまの調子 */
+/** 手元にいる鳩の、いまの調子。卵は腹を空かせない */
 export function healthOf(pigeon: Pigeon, now: number): Health {
   if (pigeon.diedAt !== undefined) return 'dead';
+  if (stageOf(pigeon, now) === 'egg') return 'fine';
   const since = now - pigeon.fedAt;
   if (since >= CARE.death) return 'dead';
   if (since >= CARE.weak) return 'weak';
@@ -151,7 +198,9 @@ export function releasablePigeons(
   letters: Letter[],
   now: number
 ): Pigeon[] {
-  return pigeonsInMyCare(pigeons, letters, now).filter((p) => !p.mine);
+  return pigeonsInMyCare(pigeons, letters, now).filter(
+    (p) => !p.mine && stageOf(p, now) === 'adult'
+  );
 }
 
 /** 誰かに渡せる鳩。自分の鳩で、手元にいるもの */
@@ -160,5 +209,7 @@ export function givablePigeons(
   letters: Letter[],
   now: number
 ): Pigeon[] {
-  return pigeonsInMyCare(pigeons, letters, now).filter((p) => p.mine);
+  return pigeonsInMyCare(pigeons, letters, now).filter(
+    (p) => p.mine && stageOf(p, now) === 'adult'
+  );
 }

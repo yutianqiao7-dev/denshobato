@@ -11,8 +11,20 @@ import {
 } from 'react-native';
 import Svg, { Circle, Ellipse, Path, Rect } from 'react-native-svg';
 import { Pigeon } from '../types';
-import { fullnessOf, Health, healthOf, LOFT_CAPACITY } from '../flock';
-import { PigeonFlyer, PigeonMark, Pose } from '../pigeonArt';
+import {
+  fullnessOf,
+  Health,
+  healthOf,
+  LOFT_CAPACITY,
+  stageOf,
+} from '../flock';
+import {
+  EggMark,
+  PigeonFlyer,
+  PigeonMark,
+  Pose,
+  SquabMark,
+} from '../pigeonArt';
 import { HUNGER_COLOR } from './HungerGauge';
 import { RING_COLORS } from '../cities';
 import { theme } from '../theme';
@@ -138,6 +150,7 @@ export function Loft({
     const lx = ((pageX - x) / w) * W;
     const ly = ((pageY - y) / h) * H;
     for (let i = 0; i < housed.length; i++) {
+      if (stageOf(housed[i], Date.now()) === 'egg') continue;
       const s = SLOTS[i];
       if (lx >= s.left - 4 && lx <= s.right + 4 && ly >= s.top - 8 && ly <= s.bottom) {
         return i;
@@ -257,7 +270,9 @@ export function Loft({
             targeted={
               target === i ||
               // 持っているあいだは、腹の減った鳩だけを光らせて案内する
-              (holding && fullnessOf(pigeon, now) < 0.75)
+              (holding &&
+                stageOf(pigeon, now) !== 'egg' &&
+                fullnessOf(pigeon, now) < 0.75)
             }
             onPress={() => (holding ? feed(i) : onSelect(pigeon))}
           />
@@ -360,6 +375,7 @@ function NestGauge({
 }) {
   const value = fullnessOf(pigeon, now);
   const health = healthOf(pigeon, now);
+  if (stageOf(pigeon, now) === 'egg') return null;
   const x = cellX(slot.col) + 4;
   const barW = CELL_W - 8;
 
@@ -498,6 +514,7 @@ function PerchedBird({
   onPress: () => void;
 }) {
   const health = healthOf(pigeon, now);
+  const stage = stageOf(pigeon, now);
   const motion = MOTION[health];
   const bob = useRef(new Animated.Value(0)).current;
   const hop = useRef(new Animated.Value(0)).current;
@@ -533,7 +550,7 @@ function PerchedBird({
 
   // 元気な鳩は跳ねたり、羽を伸ばしたりする
   useEffect(() => {
-    if (health !== 'fine') return;
+    if (health !== 'fine' || stage !== 'adult') return;
     let alive = true;
     let timer: ReturnType<typeof setTimeout>;
     let back: ReturnType<typeof setTimeout>;
@@ -572,7 +589,7 @@ function PerchedBird({
       clearTimeout(timer);
       clearTimeout(back);
     };
-  }, [hop, health]);
+  }, [hop, health, stage]);
 
   const translateY = Animated.add(
     bob.interpolate({ inputRange: [0, 1], outputRange: [0, -motion.bob] }),
@@ -605,16 +622,22 @@ function PerchedBird({
         style={{
           width: '100%',
           aspectRatio: 48 / 40,
-          transform: [{ translateY }],
-          opacity: motion.opacity,
+          transform: [{ translateY: stage === 'egg' ? 0 : translateY }],
+          opacity: stage === 'egg' ? 1 : motion.opacity,
         }}
       >
-        <PigeonMark
-          variant={pigeon.variant}
-          flip={flip}
-          pose={pose}
-          band={bandFor(pigeon)}
-        />
+        {stage === 'egg' ? (
+          <EggMark />
+        ) : stage === 'squab' ? (
+          <SquabMark variant={pigeon.variant} flip={flip} />
+        ) : (
+          <PigeonMark
+            variant={pigeon.variant}
+            flip={flip}
+            pose={pose}
+            band={bandFor(pigeon)}
+          />
+        )}
       </Animated.View>
     </Pressable>
   );

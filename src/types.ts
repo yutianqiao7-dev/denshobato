@@ -49,6 +49,17 @@ export type Pigeon = {
   fedAt: number;
   /** 世話が絶えて死んだ時刻 */
   diedAt?: number;
+  /**
+   * 卵が孵る時刻。迎えた鳩や預かった鳩には入っていない（最初から成鳥）。
+   * これがある鳩は、卵 → 雛 → 成鳥 と育つ。
+   */
+  hatchesAt?: number;
+  /** 雛が巣立つ時刻。ここを過ぎると手紙を運べる */
+  fledgesAt?: number;
+  /** 親の名前。血筋を辿るため */
+  parents?: [string, string];
+  /** 最後に卵を持った時刻。続けては産めない */
+  bredAt?: number;
   /** 世話を促す通知の id */
   careNotificationId?: string;
 };

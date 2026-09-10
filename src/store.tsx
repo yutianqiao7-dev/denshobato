@@ -17,8 +17,11 @@ import {
   rollCondition,
   rollLostAt,
 } from './geo';
+import { pigeonStatus } from './flock';
 import {
+  canBreed,
   CARE,
+  GROWTH,
   healthOf,
   letterStatus,
   LOFT_CAPACITY,
@@ -26,9 +29,10 @@ import {
   releasablePigeons,
   RISK_BY_HEALTH,
   SPEED_BY_HEALTH,
+  stageOf,
 } from './flock';
-import { PLUMAGES } from './pigeonArt';
 import { PIGEON_EMOJI, PIGEON_NAMES, RING_COLORS } from './cities';
+import { PLUMAGES } from './pigeonArt';
 import { cancelArrival, scheduleArrival } from './notify';
 import { codeKind, decodeLetter, decodePigeon, encodeLetter } from './pigeonCode';
 import {
@@ -57,13 +61,20 @@ type Store = {
   loaded: boolean;
   setMyName: (name: string) => void;
   setHome: (place: Place) => void;
-  /** 新しい鳩を迎える。自分の鳩舎に帰る鳩になる */
+  /**
+   * 野良鳩を迎える。自分の鳩が一羽もいなくなったときの助け船で、
+   * ふだんは卵から増やす。
+   */
   takeInPigeon: (
     name?: string,
     seed?: { ownerName?: string; loft?: Place }
   ) => Pigeon | null;
   /** 巣箱の空き数 */
   nestsFree: number;
+  /** つがいにして、卵をひとつ持たせる */
+  breed: (aId: string, bId: string) => Pigeon | null;
+  /** 野良鳩を迎えられるか（自分の鳩がいないときだけ） */
+  canTakeStray: boolean;
   /** 相手の鳩を預かったことにする（手渡しの記録） */
   borrowPigeon: (
     contactId: string,
@@ -99,6 +110,15 @@ type Store = {
     pigeon: Pigeon
   ) => { km: number; ms: number; loss: number } | null;
 };
+
+/** いま持っている自分の鳩（卵と雛、預けているもの、空の上も数える） */
+function countMyPigeons(state: AppState, now: number): number {
+  return state.pigeons.filter((p) => {
+    if (!p.mine || p.diedAt !== undefined) return false;
+    const status = pigeonStatus(p, state.letters, now);
+    return status === 'here' || status === 'lent' || status === 'flying';
+  }).length;
+}
 
 /** 巣箱の空き。手元にいる鳩だけが箱をふさぐ */
 function freeNests(state: AppState, now: number): number {
@@ -216,6 +236,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const s = stateRef.current;
     const now = Date.now();
     if (freeNests(s, now) <= 0) return null;
+    // 卵から増やすのが筋。迎えられるのは、自分の鳩が絶えたときだけ
+    // つがいを組めなくなったら詰むので、二羽を切ったら野良鳩が来る
+    if (!seed && countMyPigeons(s, now) >= 2) return null;
     const taken = s.pigeons.map((p) => p.name);
     const fresh = PIGEON_NAMES.filter((n) => !taken.includes(n));
     const pigeon: Pigeon = {
@@ -242,6 +265,57 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
     return pigeon;
   }, [scheduleCare]);
+
+  const breed = useCallback((aId: string, bId: string) => {
+    const s = stateRef.current;
+    const now = Date.now();
+    if (aId === bId) return null;
+    if (freeNests(s, now) <= 0) return null;
+
+    const a = s.pigeons.find((p) => p.id === aId);
+    const b = s.pigeons.find((p) => p.id === bId);
+    if (!a || !b || !canBreed(a, now) || !canBreed(b, now)) return null;
+
+    // 羽色はどちらかの親から。ときどき先祖返りする
+    const inherited =
+      Math.random() < 0.1
+        ? pick(PLUMAGES).id
+        : Math.random() < 0.5
+          ? a.variant
+          : b.variant;
+
+    const taken = s.pigeons.map((p) => p.name);
+    const fresh = PIGEON_NAMES.filter((n) => !taken.includes(n));
+    const hatchesAt = now + GROWTH.egg;
+
+    const egg: Pigeon = {
+      id: newId(),
+      name: pick(fresh.length > 0 ? fresh : PIGEON_NAMES),
+      emoji: pick(PIGEON_EMOJI),
+      variant: inherited,
+      takenInAt: now,
+      mine: true,
+      ownerName: s.myName,
+      loft: s.home ?? { name: '鳩舎', lat: 0, lng: 0 },
+      custody: { kind: 'here' },
+      // 孵るまでは腹を空かせない。孵った時点から数えはじめる
+      fedAt: hatchesAt,
+      hatchesAt,
+      fledgesAt: hatchesAt + GROWTH.squab,
+      parents: [a.name, b.name],
+    };
+
+    setState((prev) => ({
+      ...prev,
+      pigeons: [
+        ...prev.pigeons.map((p) =>
+          p.id === aId || p.id === bId ? { ...p, bredAt: now } : p
+        ),
+        egg,
+      ],
+    }));
+    return egg;
+  }, []);
 
   const borrowPigeon = useCallback(
     (contactId: string, name: string, variant?: string) => {
@@ -615,6 +689,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setMyName,
       setHome,
       takeInPigeon,
+      breed,
+      canTakeStray: countMyPigeons(state, Date.now()) < 2,
       borrowPigeon,
       givePigeon,
       feedPigeon,
@@ -639,6 +715,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setMyName,
       setHome,
       takeInPigeon,
+      breed,
       borrowPigeon,
       givePigeon,
       feedPigeon,

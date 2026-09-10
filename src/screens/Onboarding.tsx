@@ -24,6 +24,11 @@ export function Onboarding() {
   const [suggestion] = useState(
     () => PIGEON_NAMES[Math.floor(Math.random() * PIGEON_NAMES.length)]
   );
+  // つがいの相手。名前がぶつからないように選んでおく
+  const [mateName] = useState(() => {
+    const others = PIGEON_NAMES.filter((n) => n !== suggestion);
+    return others[Math.floor(Math.random() * others.length)];
+  });
 
   const done = name.trim().length > 0 && place !== null;
 
@@ -38,7 +43,7 @@ export function Onboarding() {
         <Muted style={styles.lead}>
           ここで書いた手紙は、すぐには届きません。{'\n'}
           鳩が飛んだぶんの時間をかけて、相手のもとへ向かいます。{'\n'}
-          鳩は自分の鳩舎にしか帰りません。世話を怠れば死んでしまいます。
+          鳩は自分の鳩舎にしか帰りません。世話を怠れば死に、増やすには卵から育てます。
         </Muted>
 
         <Text style={styles.label}>あなたの名前</Text>
@@ -73,7 +78,12 @@ export function Onboarding() {
           onPress={() => {
             if (!place) return;
             setMyName(name.trim());
+            // 鳩は卵からしか増えないので、はじめから二羽渡す
             takeInPigeon(pigeonName || suggestion, {
+              ownerName: name.trim(),
+              loft: place,
+            });
+            takeInPigeon(mateName === (pigeonName || suggestion) ? undefined : mateName, {
               ownerName: name.trim(),
               loft: place,
             });
