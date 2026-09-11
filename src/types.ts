@@ -132,6 +132,8 @@ export type AppState = {
   contacts: Contact[];
   letters: Letter[];
   settings: Settings;
+  /** 最後に野良鳩が迷い込んできた時刻。続けては来ない */
+  strayAt?: number;
 };
 
 export const DEFAULT_SETTINGS: Settings = {

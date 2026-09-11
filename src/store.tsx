@@ -20,7 +20,7 @@ import {
   rollLossPoint,
   rollWeather,
 } from './geo';
-import { pigeonStatus } from './flock';
+import { pigeonStatus, strayComes } from './flock';
 import {
   canBreed,
   CARE,
@@ -142,12 +142,9 @@ type Store = {
 };
 
 /** いま持っている自分の鳩（卵と雛、預けているもの、空の上も数える） */
-function countMyPigeons(state: AppState, now: number): number {
-  return state.pigeons.filter((p) => {
-    if (!p.mine || p.diedAt !== undefined) return false;
-    const status = pigeonStatus(p, state.letters, now);
-    return status === 'here' || status === 'lent' || status === 'flying';
-  }).length;
+/** 野良鳩が迷い込んでくる状況か */
+function strayWelcome(state: AppState, now: number): boolean {
+  return strayComes(state.pigeons, state.letters, now, state.strayAt);
 }
 
 /** 巣箱の空き。手元にいる鳩だけが箱をふさぐ */
@@ -266,9 +263,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const s = stateRef.current;
     const now = Date.now();
     if (freeNests(s, now) <= 0) return null;
-    // 卵から増やすのが筋。迎えられるのは、自分の鳩が絶えたときだけ
-    // つがいを組めなくなったら詰むので、二羽を切ったら野良鳩が来る
-    if (!seed && countMyPigeons(s, now) >= 2) return null;
+    // 卵から増やすのが筋。野良鳩はあくまで、つがいを組めなくなったときの逃げ道
+    if (!seed && !strayWelcome(s, now)) return null;
     const taken = s.pigeons.map((p) => p.name);
     const fresh = PIGEON_NAMES.filter((n) => !taken.includes(n));
     const pigeon: Pigeon = {
@@ -283,7 +279,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       custody: { kind: 'here' },
       fedAt: now,
     };
-    setState((prev) => ({ ...prev, pigeons: [...prev.pigeons, pigeon] }));
+    setState((prev) => ({
+      ...prev,
+      pigeons: [...prev.pigeons, pigeon],
+      // 最初の二羽は数えない。野良鳩として迷い込んできたときだけ間隔を置く
+      strayAt: seed ? prev.strayAt : now,
+    }));
     scheduleCare(pigeon).then((id) => {
       if (!id) return;
       setState((prev) => ({
@@ -910,7 +911,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setHome,
       takeInPigeon,
       breed,
-      canTakeStray: countMyPigeons(state, Date.now()) < 2,
+      canTakeStray: strayWelcome(state, Date.now()),
       borrowPigeon,
       givePigeon,
       feedPigeon,

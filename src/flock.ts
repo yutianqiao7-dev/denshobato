@@ -66,6 +66,51 @@ export function canBreed(pigeon: Pigeon, now: number): boolean {
   );
 }
 
+/**
+ * つがいの当てにできる、自分の鳩。
+ *
+ * 手元にいる鳩と、いま空を飛んで帰ってきている鳩まで。
+ * 人に渡したままの鳩は、相手が放つまで帰らないので当てにしない。
+ */
+export function pigeonsOnHand(
+  pigeons: Pigeon[],
+  letters: Letter[],
+  now: number
+): Pigeon[] {
+  return pigeons.filter((p) => {
+    if (!p.mine || p.diedAt !== undefined) return false;
+    const status = pigeonStatus(p, letters, now);
+    return status === 'here' || status === 'flying';
+  });
+}
+
+/** 野良鳩が続けて迷い込んでこない間隔。卵から育てるより早くならないように */
+export const STRAY_WAIT = 5 * 24 * HOUR;
+
+/**
+ * 野良鳩が迷い込んでくるか。
+ *
+ * 手元の鳩が二羽を切ると、つがいを組めなくなって詰む。その逃げ道。
+ * 渡したままの鳩は数に入れない（相手が放つまで帰ってこないので、
+ * 数に入れると「増やせないのに野良も来ない」に落ちる）。
+ * 代わりに間隔を置いて、鳩を配って野良を集める道はふさぐ。
+ */
+export function strayComes(
+  pigeons: Pigeon[],
+  letters: Letter[],
+  now: number,
+  strayAt?: number
+): boolean {
+  if (pigeonsOnHand(pigeons, letters, now).length >= 2) return false;
+  return strayAt === undefined || now - strayAt >= STRAY_WAIT;
+}
+
+/** 次の野良鳩が迷い込んでくるまで */
+export function strayWaitLeft(now: number, strayAt?: number): number {
+  if (strayAt === undefined) return 0;
+  return Math.max(0, strayAt + STRAY_WAIT - now);
+}
+
 /** 世話をしないとこうなる、の目安 */
 export const CARE = {
   /** これを過ぎると腹をすかせる */

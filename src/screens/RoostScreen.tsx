@@ -23,9 +23,11 @@ import {
   LOFT_CAPACITY,
   pigeonStatus,
   PigeonStatus,
+  pigeonsOnHand,
   pigeonTrips,
   releasablePigeons,
   stageOf,
+  strayWaitLeft,
   STAGE_LABEL,
   STATUS_LABEL,
 } from '../flock';
@@ -131,6 +133,9 @@ export function RoostScreen({
   const borrowed = groups.here.filter((p) => !p.mine);
 
   const breeders = groups.here.filter((p) => canBreed(p, now));
+  // つがいの当てにできる自分の鳩。渡したままの鳩は帰るあてがないので数えない
+  const onHand = pigeonsOnHand(state.pigeons, state.letters, now);
+  const strayLeft = strayWaitLeft(now, state.strayAt);
 
   const needsCare = groups.here.filter(
     (p) => healthOf(p, now) !== 'fine'
@@ -225,15 +230,20 @@ export function RoostScreen({
         <Button
           label="野良鳩を迎える"
           onPress={() => takeInPigeon()}
+          disabled={nestsFree <= 0}
           style={{ marginTop: 10 }}
         />
       )}
       <Muted style={{ marginTop: 10 }}>
         {canTakeStray
           ? 'つがいを組める鳩がいません。野良鳩が一羽、迷い込んできています。'
-          : breeders.length >= 2
-            ? '鳩は卵からしか増えません。元気な成鳥を二羽えらぶと、卵をひとつ持ちます。'
-            : '卵を持てるのは、元気な成鳥が二羽そろっているときだけです。'}
+          : onHand.length < 2 && strayLeft > 0
+            ? `手元の鳩が二羽を切っています。次の野良鳩が迷い込むまで、あと${formatDuration(
+                strayLeft
+              )}。`
+            : breeders.length >= 2
+              ? '鳩は卵からしか増えません。元気な成鳥を二羽えらぶと、卵をひとつ持ちます。'
+              : '卵を持てるのは、元気な成鳥が二羽そろっているときだけです。'}
       </Muted>
       <Muted style={{ marginTop: 8 }}>
         {nestsFree > 0
