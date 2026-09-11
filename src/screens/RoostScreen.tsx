@@ -15,6 +15,7 @@ import { Pigeon } from '../types';
 import { formatDateTime, formatDistance, formatDuration, distanceKm } from '../geo';
 import {
   canBreed,
+  givablePigeons,
   GROWTH,
   growthLeft,
   healthOf,
@@ -23,6 +24,7 @@ import {
   pigeonStatus,
   PigeonStatus,
   pigeonTrips,
+  releasablePigeons,
   stageOf,
   STAGE_LABEL,
   STATUS_LABEL,
@@ -378,6 +380,18 @@ export function RoostScreen({
       <PigeonActions
         pigeon={acting}
         now={now}
+        canGive={
+          acting !== null &&
+          givablePigeons(state.pigeons, state.letters, now).some(
+            (p) => p.id === acting.id
+          )
+        }
+        canRelease={
+          acting !== null &&
+          releasablePigeons(state.pigeons, state.letters, now).some(
+            (p) => p.id === acting.id
+          )
+        }
         onClose={() => setActing(null)}
         onGive={() => {
           const target = acting;
@@ -513,6 +527,8 @@ function HerePigeon({
 function PigeonActions({
   pigeon,
   now,
+  canGive,
+  canRelease,
   onClose,
   onGive,
   onWrite,
@@ -520,6 +536,10 @@ function PigeonActions({
 }: {
   pigeon: Pigeon | null;
   now: number;
+  /** 渡せる鳩か。卵と雛は渡せない */
+  canGive: boolean;
+  /** 手紙を持たせて放てる鳩か */
+  canRelease: boolean;
   onClose: () => void;
   onGive: () => void;
   onWrite: () => void;
@@ -527,30 +547,60 @@ function PigeonActions({
 }) {
   if (!pigeon) return null;
 
+  const stage = stageOf(pigeon, now);
+
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
-          <PigeonMark
-            variant={pigeon.variant}
-            size={62}
-            band={bandFor(pigeon)}
-          />
-          <Text style={styles.sheetName}>{pigeon.name}</Text>
+          {stage === 'egg' ? (
+            <EggMark size={62} />
+          ) : stage === 'squab' ? (
+            <SquabMark variant={pigeon.variant} size={62} />
+          ) : (
+            <PigeonMark
+              variant={pigeon.variant}
+              size={62}
+              band={bandFor(pigeon)}
+            />
+          )}
+          <Text style={styles.sheetName}>
+            {pigeon.name}
+            {stage !== 'adult' ? `（${STAGE_LABEL[stage]}）` : ''}
+          </Text>
           <Muted style={{ textAlign: 'center', marginTop: 4 }}>
             {pigeon.mine
               ? 'あなたの鳩'
               : `${pigeon.ownerName}さんの鳩・${pigeon.loft.name}へ帰ります`}
           </Muted>
-          <View style={{ alignSelf: 'stretch' }}>
-            <HungerGauge pigeon={pigeon} now={now} />
-          </View>
+          {/* 卵は腹を空かせない。育つのを待つだけ */}
+          {stage !== 'egg' && (
+            <View style={{ alignSelf: 'stretch' }}>
+              <HungerGauge pigeon={pigeon} now={now} />
+            </View>
+          )}
+          {stage !== 'adult' && (
+            <Text style={styles.sheetGrowth}>
+              あと {formatDuration(growthLeft(pigeon, now))}
+              {stage === 'egg' ? ' で孵ります' : ' で巣立ちます'}
+            </Text>
+          )}
 
-          <Button
-            label={pigeon.mine ? '誰かに渡す' : '手紙を持たせる'}
-            onPress={pigeon.mine ? onGive : onWrite}
-            style={{ marginTop: 20, alignSelf: 'stretch' }}
-          />
+          {canGive || canRelease ? (
+            <Button
+              label={pigeon.mine ? '誰かに渡す' : '手紙を持たせる'}
+              onPress={pigeon.mine ? onGive : onWrite}
+              style={{ marginTop: 20, alignSelf: 'stretch' }}
+            />
+          ) : (
+            <Muted style={{ textAlign: 'center', marginTop: 18 }}>
+              {stage === 'adult'
+                ? 'いまは渡せません。'
+                : pigeon.mine
+                  ? '巣立つまでは渡せません。鳩舎で育ててください。'
+                  : '巣立つまでは飛べません。'}
+            </Muted>
+          )}
           <Button
             label="閉じる"
             tone="quiet"
@@ -1108,6 +1158,12 @@ const styles = StyleSheet.create({
     padding: 26,
     width: '100%',
     alignItems: 'center',
+  },
+  sheetGrowth: {
+    marginTop: 10,
+    fontSize: 13,
+    color: theme.inkSoft,
+    textAlign: 'center',
   },
   sheetName: {
     fontSize: 19,

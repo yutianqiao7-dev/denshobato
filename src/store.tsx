@@ -374,10 +374,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const givePigeon = useCallback(
     (pigeonId: string, contact?: { id: string; name: string }) => {
       const target = stateRef.current.pigeons.find((p) => p.id === pigeonId);
-      cancelArrival(target?.careNotificationId);
+      // 卵と雛は渡せない。相手の手元で孵っても、帰り方を知らない
+      if (!target || stageOf(target, Date.now()) !== 'adult') return;
+      cancelArrival(target.careNotificationId);
       // すでに渡してある鳩に名前だけ付けるときは、渡した時刻を動かさない
       const at =
-        target?.custody.kind === 'lent' ? target.custody.at : Date.now();
+        target.custody.kind === 'lent' ? target.custody.at : Date.now();
       setState((prev) => ({
         ...prev,
         pigeons: prev.pigeons.map((p) =>
