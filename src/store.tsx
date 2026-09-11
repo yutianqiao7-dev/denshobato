@@ -10,6 +10,7 @@ import React, {
 import { AppState as RNAppState } from 'react-native';
 import { AppState, Contact, Letter, Pigeon, Place } from './types';
 import { emptyState, loadState, saveState } from './storage';
+import { DEFAULT_SETTINGS } from './types';
 import {
   arriveAfterFlying,
   distanceKm,
@@ -38,9 +39,11 @@ import { PLUMAGES } from './pigeonArt';
 import { cancelArrival, scheduleArrival } from './notify';
 import {
   codeKind,
+  decodeBackup,
   decodeLetter,
   decodeObituary,
   decodePigeon,
+  encodeBackup,
   encodeLetter,
   encodeObituary,
   Obituary,
@@ -48,6 +51,7 @@ import {
 import {
   clearLetter,
   fetchLetters,
+  newMailbox,
   postLetter,
   relayEnabled,
 } from './relay';
@@ -60,6 +64,10 @@ const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 export type SendResult =
   | { ok: true; letter: Letter }
   | { ok: false; reason: 'no-pigeon' | 'gone' };
+
+export type RestoreResult =
+  | { ok: true; pigeons: number; letters: number }
+  | { ok: false; reason: string };
 
 export type ReceiveResult =
   | { ok: true; kind: 'letter'; letter: Letter }
@@ -127,6 +135,10 @@ type Store = {
   obituaryCode: (pigeonId: string) => string | null;
   /** 手渡しで訃報を伝え終えた */
   markDeathReported: (pigeonId: string) => void;
+  /** 鳩舎まるごとの控え。端末を変えるときに持っていく */
+  backupCode: () => string;
+  /** 控えを入れ直す。いまの鳩舎は消える */
+  restoreBackup: (code: string) => RestoreResult;
 };
 
 /** いま持っている自分の鳩（卵と雛、預けているもの、空の上も数える） */
@@ -679,6 +691,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return { ok: true, kind: 'letter', letter };
       }
 
+      if (kind === 'backup') {
+        return {
+          ok: false,
+          reason:
+            'これは鳩舎の控えです。設定 →「控えから戻す」から入れてください。',
+        };
+      }
+
       return {
         ok: false,
         reason: 'DENSHOBATO で始まる文字列を貼り付けてください。',
@@ -794,6 +814,38 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     };
   }, [loaded, state.pigeons]);
 
+  const backupCode = useCallback(() => encodeBackup(stateRef.current), []);
+
+  /**
+   * 控えを入れ直す。いまの鳩舎はまるごと入れ替わる。
+   *
+   * 巣穴の住所も控えのものに戻す。そうしないと、
+   * すでに渡してある鳩が持ち帰る手紙の行き先が変わってしまう。
+   */
+  const restoreBackup = useCallback((code: string): RestoreResult => {
+    const restored = decodeBackup(code);
+    if (!restored) {
+      return { ok: false, reason: 'この控えは読み取れませんでした。' };
+    }
+    // いま予約してある通知は、入れ替えると宛てがなくなる
+    for (const p of stateRef.current.pigeons) cancelArrival(p.careNotificationId);
+    for (const l of stateRef.current.letters) cancelArrival(l.notificationId);
+
+    const next: AppState = {
+      ...emptyState,
+      ...restored,
+      version: 2,
+      mailbox: restored.mailbox || newMailbox(),
+      settings: { ...DEFAULT_SETTINGS, ...(restored.settings ?? {}) },
+    };
+    setState(reconcile(next, Date.now()));
+    return {
+      ok: true,
+      pigeons: next.pigeons.filter((p) => p.diedAt === undefined).length,
+      letters: next.letters.length,
+    };
+  }, []);
+
   /** 手渡しで訃報を伝え終えた */
   const markDeathReported = useCallback((pigeonId: string) => {
     setState((s) => ({
@@ -877,6 +929,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       dismissDeathNotice,
       obituaryCode,
       markDeathReported,
+      backupCode,
+      restoreBackup,
       nestsFree: freeNests(state, Date.now()),
     }),
     [
@@ -905,6 +959,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       dismissDeathNotice,
       obituaryCode,
       markDeathReported,
+      backupCode,
+      restoreBackup,
     ]
   );
 

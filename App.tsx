@@ -85,6 +85,8 @@ function Main() {
       <View style={styles.root}>
         <StatusBar style="dark" />
         <Onboarding />
+        {/* 控えから戻すときも、ここで一度たずねる */}
+        <ConfirmHost />
       </View>
     );
   }

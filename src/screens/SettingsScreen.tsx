@@ -17,6 +17,7 @@ import { radius, theme } from '../theme';
 import { Button, Card, Muted, SectionTitle } from '../components/ui';
 import { PlacePicker } from '../components/PlacePicker';
 import { confirmDestructive } from '../confirm';
+import { KeepBackup, RestoreBackup } from './Backup';
 
 const SPEEDS = [40, 60, 80, 100, 120];
 
@@ -33,6 +34,8 @@ export function SettingsScreen() {
 
   const [pickingHome, setPickingHome] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [keeping, setKeeping] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   return (
     <ScrollView contentContainerStyle={styles.body}>
@@ -135,7 +138,32 @@ export function SettingsScreen() {
         </View>
       </Card>
 
+      <SectionTitle>控え</SectionTitle>
+      <Card>
+        <Text style={styles.contactName}>鳩舎を持ち出す</Text>
+        <Muted style={{ marginTop: 4 }}>
+          鳩も手紙も相手も、ぜんぶ入った一本の文字列にします。
+          端末を変えるとき、ホーム画面に置き直すときは、これを控えておいてください。
+          ホーム画面のアプリは、消すと中身も一緒に消えます。
+        </Muted>
+        <Button
+          label="控えを書き出す"
+          tone="quiet"
+          onPress={() => setKeeping(true)}
+          style={{ marginTop: 14 }}
+        />
+        <Button
+          label="控えから戻す"
+          tone="quiet"
+          onPress={() => setRestoring(true)}
+          style={{ marginTop: 10 }}
+        />
+      </Card>
+
       <View style={{ height: 80 }} />
+
+      <KeepBackup visible={keeping} onClose={() => setKeeping(false)} />
+      <RestoreBackup visible={restoring} onClose={() => setRestoring(false)} />
 
       <PlacePicker
         visible={pickingHome}
@@ -242,6 +270,7 @@ function AddContact({
 }
 
 const styles = StyleSheet.create({
+
   body: { padding: 20, paddingTop: 70 },
   title: { fontSize: 26, fontWeight: '700', color: theme.ink, letterSpacing: 4 },
   sub: { color: theme.inkFaint, fontSize: 13, marginTop: 6, marginBottom: 12 },

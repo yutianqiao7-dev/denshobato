@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +15,7 @@ import { PIGEON_NAMES } from '../cities';
 import { radius, theme } from '../theme';
 import { Button, Muted } from '../components/ui';
 import { PlacePicker } from '../components/PlacePicker';
+import { RestoreBackup } from './Backup';
 
 export function Onboarding() {
   const { setMyName, setHome, takeInPigeon } = useStore();
@@ -21,6 +23,7 @@ export function Onboarding() {
   const [pigeonName, setPigeonName] = useState('');
   const [place, setPlace] = useState<Place | null>(null);
   const [picking, setPicking] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [suggestion] = useState(
     () => PIGEON_NAMES[Math.floor(Math.random() * PIGEON_NAMES.length)]
   );
@@ -93,6 +96,21 @@ export function Onboarding() {
           style={{ marginTop: 28 }}
         />
 
+        <Pressable onPress={() => setRestoring(true)} style={{ marginTop: 26 }}>
+          <Text style={styles.restore}>
+            前に使っていた鳩舎の控えがある
+          </Text>
+        </Pressable>
+        <Muted style={{ textAlign: 'center', marginTop: 8 }}>
+          端末を変えたときや、ホーム画面に置き直したときは、
+          書き出しておいた控えから鳩舎を戻せます。
+        </Muted>
+
+        <RestoreBackup
+          visible={restoring}
+          onClose={() => setRestoring(false)}
+        />
+
         <PlacePicker
           visible={picking}
           title="あなたの鳩舎"
@@ -125,6 +143,11 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginBottom: 8,
     marginTop: 20,
+  },
+  restore: {
+    color: theme.accent,
+    fontSize: 14,
+    textAlign: 'center',
   },
   input: {
     backgroundColor: theme.card,

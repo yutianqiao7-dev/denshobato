@@ -1,4 +1,4 @@
-import { Letter, Pigeon, Place } from './types';
+import { AppState, Letter, Pigeon, Place } from './types';
 import { variantFor } from './pigeonArt';
 
 /**
@@ -10,6 +10,7 @@ import { variantFor } from './pigeonArt';
 const LETTER_PREFIX = 'DENSHOBATO1.';
 const PIGEON_PREFIX = 'DENSHOBATO1H.';
 const OBITUARY_PREFIX = 'DENSHOBATO1D.';
+const BACKUP_PREFIX = 'DENSHOBATO1B.';
 
 const B64 =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -123,10 +124,11 @@ function unpack<T>(code: string, prefix: string): T | null {
 /** どの便りか。長い接頭辞から先に見る */
 export function codeKind(
   code: string
-): 'pigeon' | 'obituary' | 'letter' | null {
+): 'pigeon' | 'obituary' | 'backup' | 'letter' | null {
   const trimmed = code.trim();
   if (trimmed.includes(PIGEON_PREFIX)) return 'pigeon';
   if (trimmed.includes(OBITUARY_PREFIX)) return 'obituary';
+  if (trimmed.includes(BACKUP_PREFIX)) return 'backup';
   if (trimmed.includes(LETTER_PREFIX)) return 'letter';
   return null;
 }
@@ -305,5 +307,64 @@ export function decodeObituary(code: string): Obituary | null {
     pigeonName: payload.pname || '名のない鳩',
     keeper: payload.keeper || '預かった人',
     diedAt: typeof payload.at === 'number' ? payload.at : Date.now(),
+  };
+}
+
+// -------------------------------------------------------- 鳩舎ごとの控え
+
+type BackupPayload = {
+  v: 1;
+  /** 控えを取った時刻 */
+  at: number;
+  state: AppState;
+};
+
+/**
+ * 鳩舎まるごとの控え。端末を変えるときに持っていくためのもの。
+ *
+ * 通知の予約番号だけは、その端末でしか意味を持たないので落とす。
+ */
+export function encodeBackup(state: AppState): string {
+  const payload: BackupPayload = {
+    v: 1,
+    at: Date.now(),
+    state: {
+      ...state,
+      pigeons: state.pigeons.map((p) => ({
+        ...p,
+        careNotificationId: undefined,
+      })),
+      letters: state.letters.map((l) => ({ ...l, notificationId: undefined })),
+    },
+  };
+  return pack(BACKUP_PREFIX, payload);
+}
+
+export function decodeBackup(code: string): AppState | null {
+  const payload = unpack<BackupPayload>(code, BACKUP_PREFIX);
+  const state = payload?.state;
+  if (
+    !payload ||
+    payload.v !== 1 ||
+    !state ||
+    !Array.isArray(state.pigeons) ||
+    !Array.isArray(state.letters) ||
+    !Array.isArray(state.contacts)
+  ) {
+    return null;
+  }
+  return state;
+}
+
+/** 控えの中身を、入れる前に数えて見せる */
+export function peekBackup(code: string) {
+  const state = decodeBackup(code);
+  if (!state) return null;
+  return {
+    myName: state.myName,
+    home: state.home?.name ?? null,
+    pigeons: state.pigeons.filter((p) => p.diedAt === undefined).length,
+    letters: state.letters.length,
+    contacts: state.contacts.length,
   };
 }
