@@ -592,6 +592,7 @@ function GivePigeon({
               <Muted style={{ marginTop: 16 }}>
                 {pigeon.name}は{state.home?.name ?? 'あなたの鳩舎'}
                 へ帰る鳩です。相手がこの鳩を放つと、手紙を持ってあなたのところへ帰ってきます。
+                この QR には鳩舎の座標が入ります（帰る先なので）。
                 {relay
                   ? 'この QR にはあなたの巣穴の住所も入っているので、以降は読み取りなしで届きます。'
                   : ''}

@@ -12,6 +12,7 @@ import { CITIES } from '../cities';
 import { Place } from '../types';
 import { radius, theme } from '../theme';
 import { Button, Muted, SectionTitle } from './ui';
+import { locateHere } from '../locate';
 
 type Props = {
   visible: boolean;
@@ -25,6 +26,22 @@ export function PlacePicker({ visible, title, onSelect, onClose }: Props) {
   const [lat, setLat] = useState('');
   const [lng, setLng] = useState('');
   const [error, setError] = useState('');
+  const [locating, setLocating] = useState(false);
+
+  /** いまいる場所を、下の欄に書き込む。名前は直してから決められる */
+  const useHere = async () => {
+    setLocating(true);
+    setError('');
+    const result = await locateHere();
+    setLocating(false);
+    if (!result.ok) {
+      setError(result.reason);
+      return;
+    }
+    setName(result.place.name);
+    setLat(String(result.place.lat));
+    setLng(String(result.place.lng));
+  };
 
   const useCustom = () => {
     const latNum = Number(lat);
@@ -51,6 +68,15 @@ export function PlacePicker({ visible, title, onSelect, onClose }: Props) {
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={styles.body}>
+          <Button
+            label={locating ? '測っています…' : 'いまいる場所にする'}
+            onPress={useHere}
+            busy={locating}
+          />
+          <Muted style={{ marginTop: 10, marginBottom: 22 }}>
+            端末の位置を下の欄に書き込みます。名前は直せます。
+          </Muted>
+
           {CITIES.map((group) => (
             <View key={group.group} style={{ marginBottom: 18 }}>
               <SectionTitle>{group.group}</SectionTitle>

@@ -23,7 +23,13 @@
       "output": "single"
     },
     "plugins": [
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "鳩舎の場所を、いまいる地点から決めるために使います。"
+        }
+      ]
     ],
     "experiments": {
       "baseUrl": "/denshobato"

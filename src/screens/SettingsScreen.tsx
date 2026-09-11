@@ -55,7 +55,10 @@ export function SettingsScreen() {
           <Text style={styles.rowValue}>{state.home?.name ?? '未設定'}</Text>
           <Text style={styles.rowArrow}>変える</Text>
         </Pressable>
-        <Muted>あなたの鳩は、どこで放たれてもここへ帰ってきます。</Muted>
+        <Muted>
+          あなたの鳩は、どこで放たれてもここへ帰ってきます。「いまいる場所にする」で
+          端末の位置から決められます。座標は、鳩を渡すときの QR に入って相手へ渡ります。
+        </Muted>
       </Card>
 
       <SectionTitle>鳩を交わす相手</SectionTitle>
