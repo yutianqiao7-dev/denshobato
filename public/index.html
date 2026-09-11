@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
+    />
+    <title>伝書鳩</title>
+    <meta
+      name="description"
+      content="鳩を預けて、手紙を運んでもらうアプリ。届くまでには、鳩が飛んだぶんの時間がかかります。"
+    />
+
+    <!-- ホーム画面に置いたときの見た目。相対の綴りにしてあるので /denshobato/ の下でも動く -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+    <meta name="theme-color" content="#F5EEDF" />
+
+    <!-- iOS。ホーム画面から開いたときは、ブラウザの枠を出さない -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="伝書鳩" />
+
+    <style id="expo-reset">
+      html,
+      body {
+        height: 100%;
+        background-color: #f5eedf;
+      }
+      body {
+        overflow: hidden;
+        overscroll-behavior: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>このアプリを動かすには JavaScript が要ります。</noscript>
+    <div id="root"></div>
+  </body>
+</html>
