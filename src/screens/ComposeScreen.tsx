@@ -12,7 +12,13 @@ import {
 } from 'react-native';
 import { useStore } from '../store';
 import { Letter } from '../types';
-import { formatDistance, formatDuration, lossOdds } from '../geo';
+import {
+  DAY_END_H,
+  DAY_START_H,
+  formatDistance,
+  formatDuration,
+  lossOdds,
+} from '../geo';
 import {
   healthOf,
   HEALTH_LABEL,
@@ -148,6 +154,11 @@ export function ComposeScreen({
                   <Muted>
                     {state.home?.name} で放つと、{pigeon.name}は
                     {pigeon.ownerName}さんの鳩舎（{pigeon.loft.name}）へ帰ります。
+                  </Muted>
+                  <Muted style={{ marginTop: 6 }}>
+                    羽ばたくのは {formatDuration(preview.flyMs)} ぶん。
+                    {DAY_START_H}時から{DAY_END_H}時までしか飛ばず、
+                    夜は止まり木で休みます。空模様しだいで、これより遅れることもあります。
                   </Muted>
                   <Text style={styles.risk}>
                     この距離だと、{lossOdds(preview.km, RISK_BY_HEALTH[health])}

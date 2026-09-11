@@ -75,7 +75,8 @@ export function ReceiveScreen({
           <Muted style={{ marginBottom: 16 }}>
             相手の画面に出ている QR を読み取ります。{'\n'}
             ・鳩の QR … 相手の鳩を預かります。世話はあなたの仕事になります{'\n'}
-            ・手紙の QR … あなたの鳩が手紙を持って帰ってきます
+            ・手紙の QR … あなたの鳩が手紙を持って帰ってきます{'\n'}
+            ・訃報の QR … 預けた鳩が、相手の手元で死んだ知らせです
           </Muted>
 
           {scanning ? (

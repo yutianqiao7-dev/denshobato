@@ -89,6 +89,9 @@ export function RoostScreen({
     feedPigeon,
     removePigeon,
     nestsFree,
+    obituaryCode,
+    markDeathReported,
+    relay,
   } = useStore();
   const now = useNow(15000);
   const [giving, setGiving] = useState<Pigeon | null>(null);
@@ -96,6 +99,7 @@ export function RoostScreen({
   const [acting, setActing] = useState<Pigeon | null>(null);
   const [taken, setTaken] = useState<Pigeon | null>(null);
   const [pairing, setPairing] = useState(false);
+  const [mourning, setMourning] = useState<Pigeon | null>(null);
 
   const askRemove = (pigeon: Pigeon) => {
     confirmDestructive(
@@ -321,8 +325,30 @@ export function RoostScreen({
                         : ''}
                       ・{pigeonTrips(p, state.letters, now)}回運びました
                     </Muted>
+                    {p.mine && p.diedUnder && (
+                      <Muted style={{ marginTop: 4 }}>
+                        {p.diedUnder}さんの手元で死にました
+                      </Muted>
+                    )}
+                    {!p.mine && p.diedAt !== undefined && (
+                      <Muted style={{ marginTop: 4 }}>
+                        {p.deathReported
+                          ? `${p.ownerName}さんに知らせました`
+                          : `${p.ownerName}さんの鳩でした`}
+                      </Muted>
+                    )}
                   </View>
-                  <RemoveLink onPress={() => askRemove(p)} />
+                  <View style={{ alignItems: 'flex-end' }}>
+                    {!p.mine &&
+                      p.diedAt !== undefined &&
+                      !p.deathReported &&
+                      (!relay || !p.mailbox) && (
+                        <Pressable onPress={() => setMourning(p)} hitSlop={8}>
+                          <Text style={styles.tellLink}>訃報を伝える</Text>
+                        </Pressable>
+                      )}
+                    <RemoveLink onPress={() => askRemove(p)} />
+                  </View>
                 </View>
               </Card>
             );
@@ -334,10 +360,20 @@ export function RoostScreen({
       <Button label="コードを貼り付ける" tone="quiet" onPress={onReceive} />
       <Muted style={{ marginTop: 10 }}>
         相手が渡してきた鳩コード（鳩を預かる）も、放たれた鳩の手紙コードも、
-        同じところに貼り付けてください。
+        預けた鳩の訃報コードも、同じところに貼り付けてください。
       </Muted>
 
       <View style={{ height: 80 }} />
+
+      <TellDeath
+        pigeon={mourning}
+        code={mourning ? obituaryCode(mourning.id) : null}
+        onClose={() => setMourning(null)}
+        onTold={() => {
+          if (mourning) markDeathReported(mourning.id);
+          setMourning(null);
+        }}
+      />
 
       <PigeonActions
         pigeon={acting}
@@ -925,7 +961,61 @@ function BorrowPigeon({
   );
 }
 
+/** 預かった鳩が死んだことを、飼い主に手渡しで伝える */
+function TellDeath({
+  pigeon,
+  code,
+  onClose,
+  onTold,
+}: {
+  pigeon: Pigeon | null;
+  code: string | null;
+  onClose: () => void;
+  onTold: () => void;
+}) {
+  if (!pigeon || !code) return null;
+  return (
+    <Modal visible animationType="slide" onRequestClose={onClose}>
+      <ScrollView contentContainerStyle={styles.tellWrap}>
+        <Text style={styles.handTitle}>{pigeon.name}のことを伝える</Text>
+        <Muted style={{ marginBottom: 18 }}>
+          この鳩は{pigeon.ownerName}さんの鳩です。中継所を通っていないので、
+          死んだことは自動では伝わりません。
+          この QR を{pigeon.ownerName}さんに読んでもらってください。
+        </Muted>
+        <QrView value={code} size={220} />
+        <Button
+          label="コードを送る"
+          tone="quiet"
+          onPress={() =>
+            Share.share({
+              message: `${pigeon.name}は、わたしの手元で死んでしまいました。
+この訃報コードを「伝書鳩」アプリで読んでください。
+
+${code}`,
+            }).catch(() => undefined)
+          }
+          style={{ marginTop: 20 }}
+        />
+        <Text selectable style={styles.code}>
+          {code}
+        </Text>
+        <Button label="伝えた" onPress={onTold} style={{ marginTop: 20 }} />
+        <Button label="あとにする" tone="quiet" onPress={onClose} style={{ marginTop: 10 }} />
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
+  tellLink: { color: theme.accent, fontSize: 13, marginBottom: 6 },
+  tellWrap: {
+    padding: 26,
+    paddingTop: 70,
+    backgroundColor: theme.paper,
+    flexGrow: 1,
+  },
   body: { padding: 20, paddingTop: 70 },
   title: { fontSize: 26, fontWeight: '700', color: theme.ink, letterSpacing: 4 },
   sub: { color: theme.inkFaint, fontSize: 13, marginTop: 6, marginBottom: 18 },

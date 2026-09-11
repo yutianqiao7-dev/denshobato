@@ -9,6 +9,7 @@ import { variantFor } from './pigeonArt';
  */
 const LETTER_PREFIX = 'DENSHOBATO1.';
 const PIGEON_PREFIX = 'DENSHOBATO1H.';
+const OBITUARY_PREFIX = 'DENSHOBATO1D.';
 
 const B64 =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -119,10 +120,13 @@ function unpack<T>(code: string, prefix: string): T | null {
   }
 }
 
-/** 鳩コードか手紙コードか。長い接頭辞から先に見る */
-export function codeKind(code: string): 'pigeon' | 'letter' | null {
+/** どの便りか。長い接頭辞から先に見る */
+export function codeKind(
+  code: string
+): 'pigeon' | 'obituary' | 'letter' | null {
   const trimmed = code.trim();
   if (trimmed.includes(PIGEON_PREFIX)) return 'pigeon';
+  if (trimmed.includes(OBITUARY_PREFIX)) return 'obituary';
   if (trimmed.includes(LETTER_PREFIX)) return 'letter';
   return null;
 }
@@ -195,6 +199,10 @@ type LetterPayload = {
   body: string;
   sentAt: number;
   arrivesAt: number;
+  /** 飛ぶ時間の総量。相手の端末でも同じように進ませるため */
+  fms?: number;
+  /** 空模様 */
+  wx?: string;
   /** 鳩が力尽きる時刻。無事に着く鳩には入っていない */
   lostAt?: number;
   km: number;
@@ -218,6 +226,8 @@ export function encodeLetter(letter: Letter, senderName: string): string {
     body: letter.body,
     sentAt: letter.sentAt,
     arrivesAt: letter.arrivesAt,
+    fms: letter.flyMs,
+    wx: letter.weather,
     lostAt: letter.lostAt,
     km: letter.distanceKm,
     cond: letter.condition,
@@ -247,9 +257,53 @@ export function decodeLetter(code: string): Letter | null {
     distanceKm: payload.km,
     sentAt: payload.sentAt,
     arrivesAt: payload.arrivesAt,
+    flyMs: payload.fms,
+    weather: payload.wx,
     lostAt: payload.lostAt,
     condition: payload.cond,
     ring: payload.ring,
     read: false,
+  };
+}
+
+// ------------------------------------------------------------ 訃報を飼い主へ
+
+export type Obituary = {
+  /** 死んだ鳩の id。飼い主の手元では「預けてある鳩」として残っている */
+  pigeonId: string;
+  pigeonName: string;
+  /** 看取った人の名前 */
+  keeper: string;
+  diedAt: number;
+};
+
+type ObituaryPayload = {
+  v: 1;
+  pid: string;
+  pname: string;
+  keeper: string;
+  at: number;
+};
+
+/** 預かった鳩が死んだことを、飼い主の巣穴に置きに行くためのコード */
+export function encodeObituary(o: Obituary): string {
+  const payload: ObituaryPayload = {
+    v: 1,
+    pid: o.pigeonId,
+    pname: o.pigeonName,
+    keeper: o.keeper || '預かった人',
+    at: o.diedAt,
+  };
+  return pack(OBITUARY_PREFIX, payload);
+}
+
+export function decodeObituary(code: string): Obituary | null {
+  const payload = unpack<ObituaryPayload>(code, OBITUARY_PREFIX);
+  if (!payload || payload.v !== 1 || !payload.pid) return null;
+  return {
+    pigeonId: payload.pid,
+    pigeonName: payload.pname || '名のない鳩',
+    keeper: payload.keeper || '預かった人',
+    diedAt: typeof payload.at === 'number' ? payload.at : Date.now(),
   };
 }

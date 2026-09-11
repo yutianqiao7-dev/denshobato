@@ -52,7 +52,7 @@ function noticeForLetter(letter: Letter): NoticeState {
 }
 
 function Main() {
-  const { state, loaded } = useStore();
+  const { state, loaded, deathNotices, dismissDeathNotice } = useStore();
   const [tab, setTab] = useState<Tab>('sky');
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -99,6 +99,15 @@ function Main() {
     if (result.kind === 'letter') {
       setTab('sky');
       setNotice(noticeForLetter(result.letter));
+    } else if (result.kind === 'obituary') {
+      setTab('roost');
+      setNotice({
+        variant: 'blue',
+        title: `${result.obituary.pigeonName}は帰ってきません`,
+        detail: `${result.obituary.keeper}さんの手元で、${formatDateTime(
+          result.obituary.diedAt
+        )}に死んでしまいました。`,
+      });
     } else {
       setTab('roost');
       setNotice({
@@ -199,6 +208,17 @@ function Main() {
           title={notice.title}
           detail={notice.detail}
           onClose={() => setNotice(null)}
+        />
+      )}
+
+      {!notice && deathNotices.length > 0 && (
+        <Notice
+          mark={<Text style={{ fontSize: 46 }}>🕯️</Text>}
+          title={`${deathNotices[0].pigeonName}は帰ってきません`}
+          detail={`${deathNotices[0].keeper}さんの手元で、${formatDateTime(
+            deathNotices[0].diedAt
+          )}に死んでしまいました。預けた鳩の世話は、預かった人の仕事です。`}
+          onClose={() => dismissDeathNotice(deathNotices[0].pigeonId)}
         />
       )}
     </View>

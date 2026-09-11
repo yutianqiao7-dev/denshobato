@@ -15,6 +15,7 @@ import {
   formatDateTime,
   formatDistance,
   formatDuration,
+  isFlyingHour,
   progressOf,
 } from '../geo';
 import { lastSeenAt, letterStatus } from '../flock';
@@ -124,6 +125,12 @@ export function LetterDetail({
                 あと {formatDuration(live.arrivesAt - now)}
               </Text>
               <Muted>{formatDateTime(live.arrivesAt)} 着の予定</Muted>
+              <Muted style={{ marginTop: 6 }}>
+                {live.weather ? `空模様は${live.weather}。` : ''}
+                {isFlyingHour(now, live.from.lng)
+                  ? '飛んでいます'
+                  : '日が暮れました。夜のあいだは休んでいます'}
+              </Muted>
             </View>
           )}
 

@@ -5,6 +5,7 @@ import {
   formatDateTime,
   formatDistance,
   formatDuration,
+  isFlyingHour,
   progressOf,
 } from '../geo';
 import { lastSeenAt, letterStatus } from '../flock';
@@ -62,6 +63,11 @@ export function LetterCard({
               {'  ·  '}
               {formatDateTime(letter.arrivesAt)}着
             </Text>
+          </Text>
+          <Text style={styles.etaFaint}>
+            {letter.weather ?? '晴れ'}
+            {'  ·  '}
+            {isFlyingHour(now, letter.from.lng) ? '飛んでいます' : '夜。休んでいます'}
           </Text>
         </>
       )}

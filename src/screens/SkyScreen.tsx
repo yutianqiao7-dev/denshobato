@@ -4,6 +4,7 @@ import { useStore } from '../store';
 import { useNow } from '../useNow';
 import { Letter } from '../types';
 import { letterStatus, releasablePigeons } from '../flock';
+import { isFlyingHour } from '../geo';
 import { theme } from '../theme';
 import { Button, Empty } from '../components/ui';
 import { LetterCard } from '../components/LetterCard';
@@ -54,6 +55,11 @@ export function SkyScreen({
             ? `・預かった鳩が${releasable.length}羽`
             : '・放てる鳩がいません'}
         </Text>
+        {flying.length > 0 && state.home && !isFlyingHour(now, state.home.lng) && (
+          <Text style={styles.night}>
+            日が暮れました。鳩は止まり木で夜を越し、朝になるとまた飛びはじめます。
+          </Text>
+        )}
         {notHanded > 0 && (
           <Text style={styles.todo}>
             {notHanded}通、まだ相手に渡していません。手紙を開いて QR
@@ -102,6 +108,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     marginBottom: 18,
+  },
+  night: {
+    fontSize: 13,
+    color: theme.inkSoft,
+    marginTop: 10,
+    lineHeight: 20,
   },
   fabWrap: {
     position: 'absolute',

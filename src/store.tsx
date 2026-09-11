@@ -11,11 +11,13 @@ import { AppState as RNAppState } from 'react-native';
 import { AppState, Contact, Letter, Pigeon, Place } from './types';
 import { emptyState, loadState, saveState } from './storage';
 import {
+  arriveAfterFlying,
   distanceKm,
   flightDurationMs,
   lossChance,
   rollCondition,
-  rollLostAt,
+  rollLossPoint,
+  rollWeather,
 } from './geo';
 import { pigeonStatus } from './flock';
 import {
@@ -34,7 +36,15 @@ import {
 import { PIGEON_EMOJI, PIGEON_NAMES, RING_COLORS } from './cities';
 import { PLUMAGES } from './pigeonArt';
 import { cancelArrival, scheduleArrival } from './notify';
-import { codeKind, decodeLetter, decodePigeon, encodeLetter } from './pigeonCode';
+import {
+  codeKind,
+  decodeLetter,
+  decodeObituary,
+  decodePigeon,
+  encodeLetter,
+  encodeObituary,
+  Obituary,
+} from './pigeonCode';
 import {
   clearLetter,
   fetchLetters,
@@ -54,6 +64,7 @@ export type SendResult =
 export type ReceiveResult =
   | { ok: true; kind: 'letter'; letter: Letter }
   | { ok: true; kind: 'pigeon'; pigeon: Pigeon }
+  | { ok: true; kind: 'obituary'; obituary: Obituary }
   | { ok: false; reason: string };
 
 type Store = {
@@ -108,7 +119,14 @@ type Store = {
   setNotify: (on: boolean) => void;
   previewFlight: (
     pigeon: Pigeon
-  ) => { km: number; ms: number; loss: number } | null;
+  ) => { km: number; ms: number; flyMs: number; loss: number } | null;
+  /** 預けた鳩の訃報。まだ見ていないぶん */
+  deathNotices: Obituary[];
+  dismissDeathNotice: (pigeonId: string) => void;
+  /** 飼い主に知らせる道がない鳩（中継所を通っていない鳩）の訃報コード */
+  obituaryCode: (pigeonId: string) => string | null;
+  /** 手渡しで訃報を伝え終えた */
+  markDeathReported: (pigeonId: string) => void;
 };
 
 /** いま持っている自分の鳩（卵と雛、預けているもの、空の上も数える） */
@@ -156,11 +174,11 @@ function reconcile(state: AppState, now: number): AppState {
       changed = true;
     }
 
-    // 手元にいるのに世話が絶えた鳩
+    // 手元にいるのに世話が絶えた鳩。
+    // 飼い主のもとへ帰った鳩や空の上の鳩は、こちらの餌箱とは関係ない
     if (
       next.diedAt === undefined &&
-      next.custody.kind === 'here' &&
-      now - next.fedAt >= CARE.death
+      pigeonStatus(next, state.letters, now) === 'dead'
     ) {
       next = { ...next, diedAt: next.fedAt + CARE.death };
       changed = true;
@@ -439,13 +457,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const now = Date.now();
     const health = healthOf(pigeon, now);
     const km = distanceKm(s.home, pigeon.loft);
+    const flyMs = flightDurationMs(
+      km,
+      s.settings.speedKmh * SPEED_BY_HEALTH[health],
+      1
+    );
     return {
       km,
-      ms: flightDurationMs(
-        km,
-        s.settings.speedKmh * SPEED_BY_HEALTH[health],
-        1
-      ),
+      // 飛ぶ時間そのもの
+      flyMs,
+      // 夜の休みを入れた、実際に着くまでの見込み
+      ms: arriveAfterFlying(now, s.home.lng, flyMs) - now,
       loss: lossChance(km, RISK_BY_HEALTH[health]),
     };
   }, []);
@@ -463,10 +485,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const km = distanceKm(s.home, pigeon.loft);
       const condition = rollCondition() * SPEED_BY_HEALTH[health];
       const sentAt = now;
-      const arrivesAt =
-        sentAt + flightDurationMs(km, s.settings.speedKmh, condition);
-      // 結末はここで決まる。あとから覆らない。
-      const lostAt = rollLostAt(km, sentAt, arrivesAt, RISK_BY_HEALTH[health]);
+
+      // 空模様も、力尽きるかどうかも、放つ瞬間に決まる。あとから覆らない
+      const weather = rollWeather(
+        flightDurationMs(km, s.settings.speedKmh, condition)
+      );
+      const flyMs = Math.max(
+        5 * 60 * 1000,
+        flightDurationMs(km, s.settings.speedKmh, condition) + weather.extraMs
+      );
+      // 夜は休むので、実際に着くのはもっと先になる
+      const arrivesAt = arriveAfterFlying(sentAt, s.home.lng, flyMs);
+      const lossPoint = rollLossPoint(km, RISK_BY_HEALTH[health]);
+      const lostAt =
+        lossPoint === undefined
+          ? undefined
+          : arriveAfterFlying(sentAt, s.home.lng, flyMs * lossPoint);
 
       const contact = s.contacts.find((c) => c.name === pigeon.ownerName);
 
@@ -485,6 +519,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         distanceKm: km,
         sentAt,
         arrivesAt,
+        flyMs,
+        weather: weather.label,
         lostAt,
         condition,
         ring: pick(RING_COLORS),
@@ -533,6 +569,57 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  /** まだ見ていない訃報。画面を開いたときに知らせる */
+  const [deathNotices, setDeathNotices] = useState<Obituary[]>([]);
+
+  const dismissDeathNotice = useCallback((pigeonId: string) => {
+    setDeathNotices((notices) =>
+      notices.filter((o) => o.pigeonId !== pigeonId)
+    );
+  }, []);
+
+  /**
+   * 預けた鳩の訃報を受け取る。
+   * 自分の鳩で、まだ生きていることになっているものだけを看取る。
+   */
+  const takeObituary = useCallback((o: Obituary): boolean => {
+    const pigeon = stateRef.current.pigeons.find(
+      (p) => p.id === o.pigeonId && p.mine
+    );
+    if (!pigeon || pigeon.diedAt !== undefined) return false;
+    cancelArrival(pigeon.careNotificationId);
+    setState((prev) => ({
+      ...prev,
+      pigeons: prev.pigeons.map((p) =>
+        p.id === o.pigeonId
+          ? {
+              ...p,
+              diedAt: o.diedAt,
+              diedUnder: o.keeper,
+              careNotificationId: undefined,
+            }
+          : p
+      ),
+    }));
+    setDeathNotices((notices) =>
+      notices.some((x) => x.pigeonId === o.pigeonId) ? notices : [...notices, o]
+    );
+    return true;
+  }, []);
+
+  /** 中継所を通らずに訃報を伝えるための、手渡しのコード */
+  const obituaryCode = useCallback((pigeonId: string): string | null => {
+    const s = stateRef.current;
+    const pigeon = s.pigeons.find((p) => p.id === pigeonId);
+    if (!pigeon || pigeon.mine || pigeon.diedAt === undefined) return null;
+    return encodeObituary({
+      pigeonId: pigeon.id,
+      pigeonName: pigeon.name,
+      keeper: s.myName,
+      diedAt: pigeon.diedAt,
+    });
+  }, []);
+
   const receiveCode = useCallback(
     async (code: string): Promise<ReceiveResult> => {
       const kind = codeKind(code);
@@ -555,6 +642,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
         setState((prev) => ({ ...prev, pigeons: [...prev.pigeons, pigeon] }));
         return { ok: true, kind: 'pigeon', pigeon };
+      }
+
+      if (kind === 'obituary') {
+        const obituary = decodeObituary(code);
+        if (!obituary) {
+          return { ok: false, reason: 'この訃報は読み取れませんでした。' };
+        }
+        if (!takeObituary(obituary)) {
+          return {
+            ok: false,
+            reason: 'この鳩のことは、もう知らせを受けています。',
+          };
+        }
+        return { ok: true, kind: 'obituary', obituary };
       }
 
       if (kind === 'letter') {
@@ -583,7 +684,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         reason: 'DENSHOBATO で始まる文字列を貼り付けてください。',
       };
     },
-    []
+    [takeObituary]
   );
 
   /**
@@ -598,6 +699,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (found.length === 0) return;
 
     for (const item of found) {
+      if (codeKind(item.code) === 'obituary') {
+        const obituary = decodeObituary(item.code);
+        if (obituary && takeObituary(obituary)) {
+          scheduleArrival(
+            `${obituary.pigeonName}は帰ってきません`,
+            `${obituary.keeper}さんの手元で死んでしまいました。`,
+            Date.now() + 3000
+          );
+        }
+        clearLetter(s.mailbox, item.id);
+        continue;
+      }
+
       const decoded = decodeLetter(item.code);
       // 読めないものと、すでに持っているものは、巣穴から下げるだけ
       if (decoded && !stateRef.current.letters.some((l) => l.id === decoded.id)) {
@@ -622,7 +736,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       clearLetter(s.mailbox, item.id);
     }
-  }, []);
+  }, [takeObituary]);
 
   // 巣穴を見にいく。開いた直後と、開いているあいだ
   useEffect(() => {
@@ -637,6 +751,58 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       sub.remove();
     };
   }, [loaded, syncMailbox]);
+
+  /**
+   * 預かった鳩が手元で死んだら、飼い主の巣穴に訃報を置きに行く。
+   * 中継所を知らない鳩は置けないので、手渡しの訃報コードを使ってもらう。
+   */
+  useEffect(() => {
+    if (!loaded || !relayEnabled()) return;
+    const pending = state.pigeons.filter(
+      (p) =>
+        !p.mine &&
+        p.diedAt !== undefined &&
+        p.mailbox &&
+        !p.deathReported
+    );
+    if (pending.length === 0) return;
+
+    let alive = true;
+    (async () => {
+      for (const pigeon of pending) {
+        const sent = await postLetter(
+          pigeon.mailbox as string,
+          `death-${pigeon.id}`,
+          encodeObituary({
+            pigeonId: pigeon.id,
+            pigeonName: pigeon.name,
+            keeper: stateRef.current.myName,
+            diedAt: pigeon.diedAt as number,
+          })
+        );
+        if (!sent || !alive) continue;
+        setState((prev) => ({
+          ...prev,
+          pigeons: prev.pigeons.map((p) =>
+            p.id === pigeon.id ? { ...p, deathReported: true } : p
+          ),
+        }));
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [loaded, state.pigeons]);
+
+  /** 手渡しで訃報を伝え終えた */
+  const markDeathReported = useCallback((pigeonId: string) => {
+    setState((s) => ({
+      ...s,
+      pigeons: s.pigeons.map((p) =>
+        p.id === pigeonId ? { ...p, deathReported: true } : p
+      ),
+    }));
+  }, []);
 
   const markHandedOver = useCallback((letterId: string) => {
     setState((s) => ({
@@ -707,6 +873,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setSpeed,
       setNotify,
       previewFlight,
+      deathNotices,
+      dismissDeathNotice,
+      obituaryCode,
+      markDeathReported,
       nestsFree: freeNests(state, Date.now()),
     }),
     [
@@ -731,6 +901,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setSpeed,
       setNotify,
       previewFlight,
+      deathNotices,
+      dismissDeathNotice,
+      obituaryCode,
+      markDeathReported,
     ]
   );
 

@@ -49,6 +49,10 @@ export type Pigeon = {
   fedAt: number;
   /** 世話が絶えて死んだ時刻 */
   diedAt?: number;
+  /** 誰の手元で死んだか。預かった鳩を看取った人の名前 */
+  diedUnder?: string;
+  /** 預かった鳩の訃報を、飼い主の巣穴に置き終えたか */
+  deathReported?: boolean;
   /**
    * 卵が孵る時刻。迎えた鳩や預かった鳩には入っていない（最初から成鳥）。
    * これがある鳩は、卵 → 雛 → 成鳥 と育つ。
@@ -86,8 +90,12 @@ export type Letter = {
   distanceKm: number;
   /** 放った時刻 (epoch ms) */
   sentAt: number;
-  /** 到着予定時刻 (epoch ms) */
+  /** 到着予定時刻 (epoch ms)。夜の休みも織り込んだ実時刻 */
   arrivesAt: number;
+  /** 実際に飛ぶ時間の総量。夜を挟むぶん、到着までの実時間はこれより長い */
+  flyMs?: number;
+  /** その旅の空模様 */
+  weather?: string;
   /**
    * この鳩が力尽きる時刻。放った瞬間に決まっていて、あとから変わらない。
    * 無事に着く鳩には入っていない。
