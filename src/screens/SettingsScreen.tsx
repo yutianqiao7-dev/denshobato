@@ -17,6 +17,7 @@ import { radius, theme } from '../theme';
 import { Button, Card, Muted, SectionTitle } from '../components/ui';
 import { PlacePicker } from '../components/PlacePicker';
 import { confirmDestructive } from '../confirm';
+import { CAN_NOTIFY } from '../notify';
 import { KeepBackup, RestoreBackup } from './Backup';
 
 const SPEEDS = [40, 60, 80, 100, 120];
@@ -128,14 +129,27 @@ export function SettingsScreen() {
         <View style={styles.switchRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.contactName}>知らせる</Text>
-            <Muted>鳩の到着と、餌が要るときに通知します。</Muted>
+            <Muted>
+              {CAN_NOTIFY
+                ? '鳩の到着と、餌が要るときに通知します。'
+                : 'この端末では通知を出せません。'}
+            </Muted>
           </View>
           <Switch
-            value={state.settings.notify}
+            value={CAN_NOTIFY && state.settings.notify}
             onValueChange={setNotify}
+            disabled={!CAN_NOTIFY}
             trackColor={{ true: theme.accent }}
           />
         </View>
+        {!CAN_NOTIFY && (
+          <Muted style={{ marginTop: 12 }}>
+            ブラウザで開いている版は、ホーム画面に置いたものも含めて、
+            閉じているあいだに端末を起こせません。
+            鳩が着く時刻は空の画面と手紙に出ているので、そちらで確かめてください。
+            通知が要るなら、iPhone・Android のアプリとして入れる必要があります。
+          </Muted>
+        )}
       </Card>
 
       <SectionTitle>控え</SectionTitle>

@@ -3,17 +3,30 @@ import * as Notifications from 'expo-notifications';
 
 let ready = false;
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+/**
+ * この端末に通知を出せるか。
+ *
+ * expo-notifications が面倒を見るのは Android と iOS だけで、
+ * ブラウザは対象外（https://docs.expo.dev/versions/v57.0.0/sdk/notifications/）。
+ * 閉じているあいだに端末を起こすには押し出す側のサーバが要るので、
+ * web 版では約束しない。
+ */
+export const CAN_NOTIFY = Platform.OS === 'ios' || Platform.OS === 'android';
+
+if (CAN_NOTIFY) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+}
 
 /** 通知が使えるなら準備する。使えなくてもアプリは動く */
 export async function prepareNotifications(): Promise<boolean> {
+  if (!CAN_NOTIFY) return false;
   if (ready) return true;
   try {
     if (Platform.OS === 'android') {
@@ -62,7 +75,7 @@ export async function scheduleArrival(
 }
 
 export async function cancelArrival(id?: string): Promise<void> {
-  if (!id) return;
+  if (!id || !CAN_NOTIFY) return;
   try {
     await Notifications.cancelScheduledNotificationAsync(id);
   } catch {
