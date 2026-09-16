@@ -899,9 +899,81 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setState((s) => ({ ...s, settings: { ...s.settings, speedKmh } }));
   }, []);
 
-  const setNotify = useCallback((notify: boolean) => {
-    setState((s) => ({ ...s, settings: { ...s.settings, notify } }));
+  /**
+   * 通知を入れ直したときに、いま飛んでいる鳩と手元の鳩のぶんを組み直す。
+   *
+   * 入れる前に放った鳩は予約を持っていない。入れた瞬間から
+   * 効いてほしいので、その場でぜんぶ取り直す。
+   */
+  const rearmNotifications = useCallback(async (on: boolean) => {
+    const s = stateRef.current;
+    const now = Date.now();
+
+    // 古い予約は、入れるときも切るときも一度たたむ
+    for (const l of s.letters) await cancelArrival(l.notificationId);
+    for (const p of s.pigeons) await cancelArrival(p.careNotificationId);
+    setState((prev) => ({
+      ...prev,
+      letters: prev.letters.map((l) => ({ ...l, notificationId: undefined })),
+      pigeons: prev.pigeons.map((p) => ({
+        ...p,
+        careNotificationId: undefined,
+      })),
+    }));
+    if (!on) return;
+
+    for (const letter of s.letters) {
+      if (letterStatus(letter, now) !== 'flying') continue;
+      const inbound = letter.direction === 'inbound';
+      const id =
+        letter.lostAt === undefined
+          ? await scheduleArrival(
+              `${letter.pigeonName}が着きました`,
+              inbound
+                ? `${letter.peerName}さんからの手紙が届きました。`
+                : `${letter.peerName}さんの鳩舎に手紙が届きました。`,
+              letter.arrivesAt
+            )
+          : await scheduleArrival(
+              `${letter.pigeonName}が戻りません`,
+              inbound
+                ? `${letter.peerName}さんからの手紙は届きませんでした。`
+                : `${letter.peerName}さんへの手紙は届きませんでした。`,
+              letter.lostAt
+            );
+      if (!id) continue;
+      setState((prev) => ({
+        ...prev,
+        letters: prev.letters.map((l) =>
+          l.id === letter.id ? { ...l, notificationId: id } : l
+        ),
+      }));
+    }
+
+    for (const pigeon of pigeonsInMyCare(s.pigeons, s.letters, now)) {
+      if (stageOf(pigeon, now) === 'egg') continue;
+      const id = await scheduleArrival(
+        `${pigeon.name}が腹を空かせています`,
+        '鳩舎をのぞいて、餌をやってください。',
+        pigeon.fedAt + CARE.weak
+      );
+      if (!id) continue;
+      setState((prev) => ({
+        ...prev,
+        pigeons: prev.pigeons.map((p) =>
+          p.id === pigeon.id ? { ...p, careNotificationId: id } : p
+        ),
+      }));
+    }
   }, []);
+
+  const setNotify = useCallback(
+    (notify: boolean) => {
+      setState((s) => ({ ...s, settings: { ...s.settings, notify } }));
+      rearmNotifications(notify);
+    },
+    [rearmNotifications]
+  );
 
   const value = useMemo<Store>(
     () => ({

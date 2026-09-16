@@ -1,17 +1,32 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import { currentPush, pushSupported } from './push';
+import { deleteWake, postWake, relayEnabled } from './relay';
 
 let ready = false;
 
 /**
  * この端末に通知を出せるか。
  *
- * expo-notifications が面倒を見るのは Android と iOS だけで、
- * ブラウザは対象外（https://docs.expo.dev/versions/v57.0.0/sdk/notifications/）。
- * 閉じているあいだに端末を起こすには押し出す側のサーバが要るので、
- * web 版では約束しない。
+ * expo-notifications が面倒を見るのは Android と iOS だけ
+ * （https://docs.expo.dev/versions/v57.0.0/sdk/notifications/）。
+ * ブラウザでは代わりに、押し出し（Web Push）で端末を起こす。
+ * src/push.ts と .github/workflows/push.yml が組になっている。
  */
 export const CAN_NOTIFY = Platform.OS === 'ios' || Platform.OS === 'android';
+
+/** ブラウザ版で、押し出しの支度が整っているか */
+export function webPushReady(): boolean {
+  return pushSupported() && relayEnabled();
+}
+
+/** この端末で通知を出せる見込みがあるか */
+export function canNotifyHere(): boolean {
+  return CAN_NOTIFY || webPushReady();
+}
+
+/** ブラウザ版の予約。中継所の棚に置いてくるだけ */
+const WEB_PREFIX = 'w:';
 
 if (CAN_NOTIFY) {
   Notifications.setNotificationHandler({
@@ -58,6 +73,16 @@ export async function scheduleArrival(
   at: number
 ): Promise<string | undefined> {
   if (at <= Date.now() + 2000) return undefined;
+
+  if (!CAN_NOTIFY) {
+    // ブラウザ版。閉じていても届くように、押し出しの棚に置く
+    if (!webPushReady()) return undefined;
+    const sub = await currentPush();
+    if (!sub) return undefined;
+    const id = await postWake({ at, title, body, ...sub });
+    return id ? WEB_PREFIX + id : undefined;
+  }
+
   try {
     const ok = await prepareNotifications();
     if (!ok) return undefined;
@@ -75,7 +100,12 @@ export async function scheduleArrival(
 }
 
 export async function cancelArrival(id?: string): Promise<void> {
-  if (!id || !CAN_NOTIFY) return;
+  if (!id) return;
+  if (id.startsWith(WEB_PREFIX)) {
+    await deleteWake(id.slice(WEB_PREFIX.length));
+    return;
+  }
+  if (!CAN_NOTIFY) return;
   try {
     await Notifications.cancelScheduledNotificationAsync(id);
   } catch {

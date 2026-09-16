@@ -8,6 +8,14 @@
           ".validate": "newData.hasChildren(['code','at']) && newData.child('code').isString() && newData.child('code').val().length <= 20000 && newData.child('at').isNumber()"
         }
       }
+    },
+    "wakes": {
+      ".read": true,
+      ".indexOn": ["at"],
+      "$wake": {
+        ".write": "!data.exists() || !newData.exists()",
+        ".validate": "newData.hasChildren(['at','title','endpoint','p256dh','auth']) && newData.child('at').isNumber() && newData.child('title').isString() && newData.child('title').val().length <= 120 && newData.child('body').isString() && newData.child('body').val().length <= 240 && newData.child('endpoint').isString() && newData.child('endpoint').val().length <= 800 && newData.child('p256dh').isString() && newData.child('p256dh').val().length <= 200 && newData.child('auth').isString() && newData.child('auth').val().length <= 60"
+      }
     }
   }
 }

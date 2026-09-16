@@ -1,0 +1,10 @@
+{
+  "name": "denshobato-push-sender",
+  "private": true,
+  "version": "1.0.0",
+  "description": "時刻が来た通知を押し出す。GitHub Actions から10分おきに走る",
+  "type": "module",
+  "dependencies": {
+    "web-push": "^3.6.7"
+  }
+}

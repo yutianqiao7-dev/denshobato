@@ -1,0 +1,42 @@
+# ブラウザ版の通知を押し出す係。
+#
+# 中継所の wakes/ に置かれた「この時刻に起こして」を拾って、
+# 過ぎたぶんを端末に押し出す。ページが閉じていても届くのはこれのおかげ。
+#
+# GitHub の定期実行は時刻ぴったりには走らないので、鳴るのは
+# 着いた時刻から10〜20分ほど遅れる。
+
+name: 鳩の知らせを押し出す
+
+on:
+  schedule:
+    # 10分おき。GitHub の都合でもう少し遅れることがある
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+# 同じ便が重ならないように
+concurrency:
+  group: push-sender
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 送り手の支度
+        working-directory: tools/push-sender
+        run: npm install --no-audit --no-fund
+
+      - name: 押し出す
+        working-directory: tools/push-sender
+        env:
+          RELAY_URL: https://hato-d4898-default-rtdb.firebaseio.com
+          VAPID_PUBLIC_KEY: BLopaZx17kMljKWQ24O-PCZarN2c8D3YUM2PZsznTLz0Yc0M4A5Z6YFBa74mBBUTH1Wav9oXbozZRn2ToJXumKQ
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+        run: node send.mjs

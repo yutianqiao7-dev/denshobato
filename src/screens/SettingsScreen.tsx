@@ -17,7 +17,8 @@ import { radius, theme } from '../theme';
 import { Button, Card, Muted, SectionTitle } from '../components/ui';
 import { PlacePicker } from '../components/PlacePicker';
 import { confirmDestructive } from '../confirm';
-import { CAN_NOTIFY } from '../notify';
+import { CAN_NOTIFY, canNotifyHere } from '../notify';
+import { disablePush, enablePush, isInstalled, isIos } from '../push';
 import { KeepBackup, RestoreBackup } from './Backup';
 
 const SPEEDS = [40, 60, 80, 100, 120];
@@ -37,6 +38,33 @@ export function SettingsScreen() {
   const [adding, setAdding] = useState(false);
   const [keeping, setKeeping] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [notifyError, setNotifyError] = useState('');
+
+  const canNotify = canNotifyHere();
+
+  /**
+   * 通知のつまみ。
+   * ブラウザ版は、押したその流れの中でしか許しをもらえないので、
+   * ここで押し出し先まで作ってから入れる。
+   */
+  const toggleNotify = async (on: boolean) => {
+    setNotifyError('');
+    if (!on) {
+      setNotify(false);
+      if (!CAN_NOTIFY) await disablePush();
+      return;
+    }
+    if (CAN_NOTIFY) {
+      setNotify(true);
+      return;
+    }
+    const result = await enablePush();
+    if (!result.ok) {
+      setNotifyError(result.reason);
+      return;
+    }
+    setNotify(true);
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.body}>
@@ -130,24 +158,34 @@ export function SettingsScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.contactName}>知らせる</Text>
             <Muted>
-              {CAN_NOTIFY
-                ? '鳩の到着と、餌が要るときに通知します。'
-                : 'この端末では通知を出せません。'}
+              {canNotify
+                ? '鳩の到着と、餌が要るときに知らせます。'
+                : 'この端末では知らせを出せません。'}
             </Muted>
           </View>
           <Switch
-            value={CAN_NOTIFY && state.settings.notify}
-            onValueChange={setNotify}
-            disabled={!CAN_NOTIFY}
+            value={canNotify && state.settings.notify}
+            onValueChange={toggleNotify}
+            disabled={!canNotify}
             trackColor={{ true: theme.accent }}
           />
         </View>
-        {!CAN_NOTIFY && (
+        {!!notifyError && <Text style={styles.error}>{notifyError}</Text>}
+        {!CAN_NOTIFY && canNotify && (
           <Muted style={{ marginTop: 12 }}>
-            ブラウザで開いている版は、ホーム画面に置いたものも含めて、
-            閉じているあいだに端末を起こせません。
-            鳩が着く時刻は空の画面と手紙に出ているので、そちらで確かめてください。
-            通知が要るなら、iPhone・Android のアプリとして入れる必要があります。
+            ブラウザ版は、閉じているあいだページが動けません。代わりに
+            中継所へ「この時刻に起こして」と置いておき、外から押し出して
+            もらいます。そのぶん、鳴るのは着いた時刻から10〜20分ほど遅れます。
+            {isIos() && !isInstalled()
+              ? ' iPhone では、ホーム画面に追加したアイコンから開いたときだけ入れられます。'
+              : ''}
+          </Muted>
+        )}
+        {!canNotify && (
+          <Muted style={{ marginTop: 12 }}>
+            {isIos()
+              ? 'iPhone では、ホーム画面に追加してから、そのアイコンで開いてください。共有 → ホーム画面に追加。'
+              : 'このブラウザは知らせを扱えません。鳩が着く時刻は空の画面と手紙に出ています。'}
           </Muted>
         )}
       </Card>
@@ -284,6 +322,8 @@ function AddContact({
 }
 
 const styles = StyleSheet.create({
+  error: { marginTop: 10, fontSize: 13, color: theme.accent, lineHeight: 20 },
+
 
   body: { padding: 20, paddingTop: 70 },
   title: { fontSize: 26, fontWeight: '700', color: theme.ink, letterSpacing: 4 },
