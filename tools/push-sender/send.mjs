@@ -16,6 +16,13 @@ const PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
 const PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
 const DRY = process.argv.includes('--dry');
 
+/**
+ * 送り手の名乗り。Apple はここを厳しく見ていて、
+ * 実在しない綴りだと 403 で突き返してくる。アプリの住所をそのまま使う。
+ */
+const SUBJECT =
+  process.env.PUSH_SUBJECT || 'https://yutianqiao7-dev.github.io/denshobato/';
+
 /** 送り先が消えていても、いつまでも残さない */
 const STALE = 7 * 24 * 60 * 60 * 1000;
 
@@ -24,11 +31,7 @@ if (!RELAY || !PUBLIC_KEY || (!PRIVATE_KEY && !DRY)) {
   process.exit(1);
 }
 
-webpush.setVapidDetails(
-  'mailto:denshobato@example.invalid',
-  PUBLIC_KEY,
-  PRIVATE_KEY || 'x'.repeat(43)
-);
+webpush.setVapidDetails(SUBJECT, PUBLIC_KEY, PRIVATE_KEY || 'x'.repeat(43));
 
 const now = Date.now();
 
@@ -103,7 +106,10 @@ for (const [id, row] of rows) {
       dropped++;
       console.log(`宛先が消えていました(${code ?? '?'}): ${label}`);
     } else {
-      console.log(`あとで出し直します(${code ?? e?.message}): ${label}`);
+      console.log(
+        `あとで出し直します(${code ?? e?.message}): ${label}` +
+          (e?.body ? ` — ${String(e.body).slice(0, 200)}` : '')
+      );
     }
   }
 }
