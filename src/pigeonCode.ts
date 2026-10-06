@@ -1,5 +1,6 @@
 import { AppState, Letter, Pigeon, Place } from './types';
 import { variantFor } from './pigeonArt';
+import { Gift } from './gift';
 
 /**
  * 手渡しの代わりになる文字列。サーバーを介さずに
@@ -145,6 +146,8 @@ type PigeonPayload = {
   loft: Place;
   /** 飼い主の巣穴の住所 */
   mb?: string;
+  /** 天分。預かる相手にも、どんな鳩かが分かるように */
+  gift?: Gift;
 };
 
 /** 自分の鳩を相手に預けるためのコード */
@@ -162,6 +165,7 @@ export function encodePigeon(
     owner: ownerName || '名もなき飼い主',
     loft: pigeon.loft,
     mb: mailbox,
+    gift: pigeon.gift,
   };
   return pack(PIGEON_PREFIX, payload);
 }
@@ -182,6 +186,8 @@ export function decodePigeon(code: string, now: number): Pigeon | null {
     custody: { kind: 'here' },
     mailbox: payload.mb,
     fedAt: now,
+    gift: payload.gift,
+    bond: 0,
   };
 }
 

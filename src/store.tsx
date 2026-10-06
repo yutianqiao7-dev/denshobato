@@ -24,6 +24,7 @@ import { pigeonStatus, strayComes } from './flock';
 import {
   canBreed,
   CARE,
+  careSpan,
   GROWTH,
   healthOf,
   letterStatus,
@@ -34,6 +35,14 @@ import {
   SPEED_BY_HEALTH,
   stageOf,
 } from './flock';
+import {
+  bondSpeed,
+  giftOf,
+  homingRisk,
+  inheritGift,
+  rollGift,
+  wingSpeed,
+} from './gift';
 import { PIGEON_EMOJI, PIGEON_NAMES, RING_COLORS } from './cities';
 import { PLUMAGES } from './pigeonArt';
 import { cancelArrival, scheduleArrival } from './notify';
@@ -179,6 +188,8 @@ function reconcile(state: AppState, now: number): AppState {
         custody: { kind: 'here' },
         // 長旅のあとなので、帰ってきた時点で腹を空かせている
         fedAt: Math.max(arrivedAt, now - CARE.hungry),
+        // 無事に務めを果たした鳩は、連れ添うほどなつく
+        bond: Math.min(99, (next.bond ?? 0) + 2),
       };
       changed = true;
     }
@@ -189,7 +200,7 @@ function reconcile(state: AppState, now: number): AppState {
       next.diedAt === undefined &&
       pigeonStatus(next, state.letters, now) === 'dead'
     ) {
-      next = { ...next, diedAt: next.fedAt + CARE.death };
+      next = { ...next, diedAt: next.fedAt + careSpan(next).death };
       changed = true;
     }
 
@@ -250,7 +261,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return scheduleArrival(
         `${pigeon.name}が腹を空かせています`,
         '鳩舎をのぞいて、餌をやってください。',
-        pigeon.fedAt + CARE.weak
+        pigeon.fedAt + careSpan(pigeon).weak
       );
     },
     []
@@ -278,6 +289,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       loft: seed?.loft ?? s.home ?? { name: '鳩舎', lat: 0, lng: 0 },
       custody: { kind: 'here' },
       fedAt: now,
+      gift: rollGift(),
+      bond: 0,
     };
     setState((prev) => ({
       ...prev,
@@ -334,6 +347,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       hatchesAt,
       fledgesAt: hatchesAt + GROWTH.squab,
       parents: [a.name, b.name],
+      // 天分は両親から継ぐ。まれに血を超える
+      gift: inheritGift(giftOf(a), giftOf(b)),
+      bond: 0,
     };
 
     setState((prev) => ({
@@ -365,6 +381,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         loft: contact.place,
         custody: { kind: 'here' },
         fedAt: now,
+        // 手で書き留めた預かり鳩は、相手の鳩の天分までは分からない
+        gift: rollGift(),
+        bond: 0,
       };
       setState((prev) => ({ ...prev, pigeons: [...prev.pigeons, pigeon] }));
       return pigeon;
@@ -431,7 +450,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             p.diedAt === undefined &&
             p.custody.kind === 'here'
         )
-        .map((p) => ({ ...p, fedAt: now, careNotificationId: undefined }));
+        .map((p) => ({
+          ...p,
+          fedAt: now,
+          careNotificationId: undefined,
+          // 腹を空かせていた鳩を満たすと、少しなつく。満腹の鳩には効かない
+          bond:
+            healthOf(p, now) !== 'fine'
+              ? Math.min(99, (p.bond ?? 0) + 1)
+              : p.bond,
+        }));
       if (fed.length === 0) return;
       const byId = new Map(fed.map((p) => [p.id, p]));
       setState((s) => ({
@@ -471,19 +499,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (!s.home) return null;
     const now = Date.now();
     const health = healthOf(pigeon, now);
+    const gift = giftOf(pigeon);
     const km = distanceKm(s.home, pigeon.loft);
-    const flyMs = flightDurationMs(
-      km,
-      s.settings.speedKmh * SPEED_BY_HEALTH[health],
-      1
-    );
+    // 健康・翼・なつきが速さに、健康・心が危うさに効く
+    const speed =
+      s.settings.speedKmh *
+      SPEED_BY_HEALTH[health] *
+      wingSpeed(gift) *
+      bondSpeed(pigeon);
+    const flyMs = flightDurationMs(km, speed, 1);
     return {
       km,
       // 飛ぶ時間そのもの
       flyMs,
       // 夜の休みを入れた、実際に着くまでの見込み
       ms: arriveAfterFlying(now, s.home.lng, flyMs) - now,
-      loss: lossChance(km, RISK_BY_HEALTH[health]),
+      loss: lossChance(km, RISK_BY_HEALTH[health] * homingRisk(gift)),
     };
   }, []);
 
@@ -497,8 +528,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (!pigeon || !s.home) return { ok: false, reason: 'no-pigeon' };
 
       const health = healthOf(pigeon, now);
+      const gift = giftOf(pigeon);
       const km = distanceKm(s.home, pigeon.loft);
-      const condition = rollCondition() * SPEED_BY_HEALTH[health];
+      // その日の調子に、健康・翼・なつきを乗せる
+      const condition =
+        rollCondition() *
+        SPEED_BY_HEALTH[health] *
+        wingSpeed(gift) *
+        bondSpeed(pigeon);
       const sentAt = now;
 
       // 空模様も、力尽きるかどうかも、放つ瞬間に決まる。あとから覆らない
@@ -511,7 +548,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       );
       // 夜は休むので、実際に着くのはもっと先になる
       const arrivesAt = arriveAfterFlying(sentAt, s.home.lng, flyMs);
-      const lossPoint = rollLossPoint(km, RISK_BY_HEALTH[health]);
+      const lossPoint = rollLossPoint(km, RISK_BY_HEALTH[health] * homingRisk(gift));
       const lostAt =
         lossPoint === undefined
           ? undefined
@@ -955,7 +992,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const id = await scheduleArrival(
         `${pigeon.name}が腹を空かせています`,
         '鳩舎をのぞいて、餌をやってください。',
-        pigeon.fedAt + CARE.weak
+        pigeon.fedAt + careSpan(pigeon).weak
       );
       if (!id) continue;
       setState((prev) => ({

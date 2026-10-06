@@ -27,6 +27,8 @@ import {
 } from '../flock';
 import { radius, theme } from '../theme';
 import { Button, Empty, Muted, SectionTitle } from '../components/ui';
+import { GradeBadge } from '../components/GiftPanel';
+import { giftOf, homingRisk, stars } from '../gift';
 
 export type Draft = { body: string; pigeonId?: string };
 
@@ -155,13 +157,24 @@ export function ComposeScreen({
                     {state.home?.name} で放つと、{pigeon.name}は
                     {pigeon.ownerName}さんの鳩舎（{pigeon.loft.name}）へ帰ります。
                   </Muted>
+                  <View style={styles.giftLine}>
+                    <GradeBadge gift={giftOf(pigeon)} />
+                    <Text style={styles.giftStat}>
+                      翼{stars(giftOf(pigeon).wing)}　心
+                      {stars(giftOf(pigeon).homing)}
+                    </Text>
+                  </View>
                   <Muted style={{ marginTop: 6 }}>
                     羽ばたくのは {formatDuration(preview.flyMs)} ぶん。
                     {DAY_START_H}時から{DAY_END_H}時までしか飛ばず、
                     夜は止まり木で休みます。空模様しだいで、これより遅れることもあります。
                   </Muted>
                   <Text style={styles.risk}>
-                    この距離だと、{lossOdds(preview.km, RISK_BY_HEALTH[health])}
+                    この距離だと、
+                    {lossOdds(
+                      preview.km,
+                      RISK_BY_HEALTH[health] * homingRisk(giftOf(pigeon))
+                    )}
                     羽に1羽は帰り着きません。
                   </Text>
                   {health !== 'fine' && (
@@ -240,6 +253,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   risk: { marginTop: 8, fontSize: 13, color: theme.accent },
+  giftLine: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
+  giftStat: { fontSize: 13, color: theme.accent },
   warn: { marginTop: 8, fontSize: 13, color: '#A03E5B', lineHeight: 20 },
   paper: {
     backgroundColor: theme.card,

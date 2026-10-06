@@ -1,4 +1,5 @@
 import { Letter, Pigeon } from './types';
+import { giftOf, gritCare } from './gift';
 
 export type LetterStatus = 'flying' | 'arrived' | 'lost';
 
@@ -131,13 +132,28 @@ export const HEALTH_LABEL: Record<Health, string> = {
 };
 
 /** 手元にいる鳩の、いまの調子。卵は腹を空かせない */
+/** この鳩の、世話の猶予。体（粘り）ぶん伸び縮みする */
+export function careSpan(pigeon: Pigeon): {
+  hungry: number;
+  weak: number;
+  death: number;
+} {
+  const k = gritCare(giftOf(pigeon));
+  return {
+    hungry: CARE.hungry * k,
+    weak: CARE.weak * k,
+    death: CARE.death * k,
+  };
+}
+
 export function healthOf(pigeon: Pigeon, now: number): Health {
   if (pigeon.diedAt !== undefined) return 'dead';
   if (stageOf(pigeon, now) === 'egg') return 'fine';
   const since = now - pigeon.fedAt;
-  if (since >= CARE.death) return 'dead';
-  if (since >= CARE.weak) return 'weak';
-  if (since >= CARE.hungry) return 'hungry';
+  const span = careSpan(pigeon);
+  if (since >= span.death) return 'dead';
+  if (since >= span.weak) return 'weak';
+  if (since >= span.hungry) return 'hungry';
   return 'fine';
 }
 
@@ -148,12 +164,12 @@ export function healthOf(pigeon: Pigeon, now: number): Health {
 export function fullnessOf(pigeon: Pigeon, now: number): number {
   if (pigeon.diedAt !== undefined) return 0;
   const left = starvesAt(pigeon) - now;
-  return Math.max(0, Math.min(1, left / CARE.death));
+  return Math.max(0, Math.min(1, left / careSpan(pigeon).death));
 }
 
 /** 世話が絶えて死ぬ時刻 */
 export function starvesAt(pigeon: Pigeon): number {
-  return pigeon.fedAt + CARE.death;
+  return pigeon.fedAt + careSpan(pigeon).death;
 }
 
 /** 弱った鳩は遅い */

@@ -38,6 +38,8 @@ import { radius, theme } from '../theme';
 import { Button, Card, Empty, Muted, SectionTitle } from '../components/ui';
 import { Loft } from '../components/Loft';
 import { HungerGauge } from '../components/HungerGauge';
+import { GiftPanel, GradeBadge } from '../components/GiftPanel';
+import { giftOf } from '../gift';
 import { QrView } from '../components/QrView';
 import { QrScanner } from '../components/QrScanner';
 import { Notice } from './ReceiveScreen';
@@ -485,10 +487,14 @@ function HerePigeon({
           )}
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.name}>
-            {pigeon.name}
-            {stage !== 'adult' ? `（${STAGE_LABEL[stage]}）` : ''}
-          </Text>
+          <View style={styles.nameLine}>
+            <Text style={styles.name}>
+              {pigeon.name}
+              {stage !== 'adult' ? `（${STAGE_LABEL[stage]}）` : ''}
+            </Text>
+            {/* 卵のうちは、どんな天分かまだ分からない */}
+            {stage !== 'egg' && <GradeBadge gift={giftOf(pigeon)} />}
+          </View>
           <Muted>
             {pigeon.parents
               ? `${pigeon.parents[0]}と${pigeon.parents[1]}の子`
@@ -594,6 +600,17 @@ function PigeonActions({
               あと {formatDuration(growthLeft(pigeon, now))}
               {stage === 'egg' ? ' で孵ります' : ' で巣立ちます'}
             </Text>
+          )}
+
+          {/* 卵のうちは、天分は伏せておく。孵ってからのお楽しみ */}
+          {stage === 'egg' ? (
+            <Text style={styles.sheetGrowth}>
+              どんな天分を持って生まれるかは、孵るまで分かりません。
+            </Text>
+          ) : (
+            <View style={{ alignSelf: 'stretch' }}>
+              <GiftPanel pigeon={pigeon} />
+            </View>
           )}
 
           {canGive || canRelease ? (
@@ -807,6 +824,8 @@ function PairUp({
           <Muted style={{ marginBottom: 16 }}>
             二羽えらぶと、巣箱にひとつ卵を持ちます。孵って巣立つまで
             {hours}時間。羽色は親のどちらかを継ぎ、たまに先祖返りします。
+            {'\n'}天分は両親の中くらいに落ち着きますが、まれに血を超えた
+            一羽が生まれます。いい二羽を選ぶほど、いい子が出やすくなります。
             親はしばらく次の卵を持てません。
           </Muted>
 
@@ -829,6 +848,7 @@ function PairUp({
                     <Text style={[styles.chipText, on && styles.chipTextOn]}>
                       {p.name}
                     </Text>
+                    <GradeBadge gift={giftOf(p)} />
                   </Pressable>
                 );
               })}
@@ -1083,6 +1103,7 @@ const styles = StyleSheet.create({
   mark: { width: 34, marginRight: 12, alignItems: 'center' },
   faded: { opacity: 0.35 },
   name: { fontSize: 16, color: theme.ink, fontWeight: '600' },
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   weakCard: { borderColor: '#A03E5B' },
   goneCard: { backgroundColor: theme.paperDeep, borderStyle: 'dashed' },
   actions: { flexDirection: 'row', gap: 10, marginTop: 12 },

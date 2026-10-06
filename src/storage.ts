@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, DEFAULT_SETTINGS, Letter, Pigeon, Place } from './types';
 import { variantFor } from './pigeonArt';
 import { newMailbox } from './relay';
+import { rollGift } from './gift';
 
 const KEY = 'denshobato:state:v1';
 
@@ -59,7 +60,12 @@ function migratePigeon(
   home: Place | null,
   now: number
 ): Pigeon {
-  if (pigeon.custody && pigeon.loft && pigeon.variant) return pigeon;
+  // 天分を持たない古い鳩には、ここで一度だけ授ける。以後は変わらない
+  const gift = pigeon.gift ?? rollGift();
+  const bond = pigeon.bond ?? 0;
+  if (pigeon.custody && pigeon.loft && pigeon.variant) {
+    return pigeon.gift ? pigeon : { ...pigeon, gift, bond };
+  }
   return {
     ...pigeon,
     variant: pigeon.variant ?? variantFor(pigeon.id),
@@ -68,6 +74,8 @@ function migratePigeon(
     loft: pigeon.loft ?? home ?? { name: '鳩舎', lat: 0, lng: 0 },
     custody: pigeon.custody ?? { kind: 'here' },
     fedAt: pigeon.fedAt ?? now,
+    gift,
+    bond,
   };
 }
 

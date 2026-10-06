@@ -1,3 +1,5 @@
+import { Gift } from './gift';
+
 export type Place = {
   name: string;
   lat: number;
@@ -62,6 +64,10 @@ export type Pigeon = {
   fledgesAt?: number;
   /** 親の名前。血筋を辿るため */
   parents?: [string, string];
+  /** 生まれ持った個体値「天分」。一生変わらない（src/gift.ts） */
+  gift?: Gift;
+  /** 後天の「なつき」。餌と旅で育つ */
+  bond?: number;
   /** 最後に卵を持った時刻。続けては産めない */
   bredAt?: number;
   /** 世話を促す通知の id */
