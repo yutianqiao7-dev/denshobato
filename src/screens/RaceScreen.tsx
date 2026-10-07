@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useStore } from '../store';
@@ -19,11 +20,14 @@ import {
   COURSES,
   Field,
   FIELDS,
+  makeSeed,
   placed,
   placeLabel,
   pigeonToRacer,
+  Racer,
   raceReadyAt,
   Result,
+  runDuel,
   runRace,
 } from '../race';
 import { giftOf } from '../gift';
@@ -32,51 +36,76 @@ import { PigeonFlyer, PigeonMark } from '../pigeonArt';
 import { radius, theme } from '../theme';
 import { Button, Muted } from '../components/ui';
 import { formatDuration } from '../geo';
+import { QrView } from '../components/QrView';
+import { copyOrShare } from '../clip';
+import {
+  Challenge,
+  codeKind,
+  decodeChallenge,
+  encodeChallenge,
+  RacePig,
+} from '../pigeonCode';
 
 const NATIVE = Platform.OS !== 'web';
 
-type Phase = 'pick' | 'setup' | 'run' | 'done';
+type Phase = 'mode' | 'pick' | 'setup' | 'run' | 'done' | 'invite' | 'paste';
+
+const courseById = (id: string): Course =>
+  COURSES.find((c) => c.id === id) ?? COURSES[1];
+
+/** 持ち運ぶ姿 → 走者（友達戦は天分だけで競う。なつきは乗せない） */
+function racePigToRacer(pig: RacePig): Racer {
+  return { id: pig.id, name: pig.name, variant: pig.variant, gift: pig.gift, bond: 0, mine: false };
+}
+function pigeonToRacePig(p: Pigeon): RacePig {
+  return { id: p.id, name: p.name, variant: p.variant, gift: giftOf(p) };
+}
 
 export function RaceScreen({ onClose }: { onClose: () => void }) {
   const { state, recordRace } = useStore();
   const now = useNow(1000);
 
-  const [phase, setPhase] = useState<Phase>('pick');
+  const [phase, setPhase] = useState<Phase>('mode');
   const [entrantId, setEntrantId] = useState<string | null>(null);
   const [course, setCourse] = useState<Course>(COURSES[1]);
   const [field, setField] = useState<Field>(FIELDS[0]);
   const [results, setResults] = useState<Result[] | null>(null);
   const [recorded, setRecorded] = useState(false);
+  // 友達戦のとき、この着順の中でどれが自分の鳩か（記録と色分けに使う）
+  const [myRacerId, setMyRacerId] = useState<string | null>(null);
+  const [friend, setFriend] = useState(false);
+  // 挑戦を受けた側が、相手に返す結果コード
+  const [replyCode, setReplyCode] = useState<string | null>(null);
 
-  // 出せるのは、自分の成鳥で、元気で、休み明けの鳩だけ
   const entrants = useMemo(
     () =>
       pigeonsInMyCare(state.pigeons, state.letters, now).filter(
-        (p) =>
-          p.mine &&
-          stageOf(p, now) === 'adult' &&
-          healthOf(p, now) === 'fine'
+        (p) => p.mine && stageOf(p, now) === 'adult' && healthOf(p, now) === 'fine'
       ),
     [state.pigeons, state.letters, now]
   );
 
   const entrant = entrants.find((p) => p.id === entrantId) ?? null;
 
-  const start = () => {
+  // ひとりで（相手は野良鳩）
+  const startSolo = () => {
     if (!entrant) return;
     setResults(runRace(pigeonToRacer(entrant), course, field));
+    setMyRacerId(entrant.id);
+    setFriend(false);
+    setReplyCode(null);
     setRecorded(false);
     setPhase('run');
   };
 
-  // 走り終えたら一度だけ書き留める
+  // 走り終えたら、自分の鳩のぶんを一度だけ書き留める
   useEffect(() => {
-    if (phase === 'done' && results && entrant && !recorded) {
-      const me = results.find((r) => r.id === entrant.id);
-      if (me) recordRace(entrant.id, me.place);
+    if (phase === 'done' && results && myRacerId && !recorded) {
+      const me = results.find((r) => r.id === myRacerId);
+      if (me) recordRace(myRacerId, me.place);
       setRecorded(true);
     }
-  }, [phase, results, entrant, recorded, recordRace]);
+  }, [phase, results, myRacerId, recorded, recordRace]);
 
   return (
     <Modal visible animationType="slide" onRequestClose={onClose}>
@@ -87,6 +116,14 @@ export function RaceScreen({ onClose }: { onClose: () => void }) {
             <Text style={styles.close}>とじる</Text>
           </Pressable>
         </View>
+
+        {phase === 'mode' && (
+          <ModePick
+            onSolo={() => setPhase('pick')}
+            onInvite={() => setPhase('invite')}
+            onPaste={() => setPhase('paste')}
+          />
+        )}
 
         {phase === 'pick' && (
           <PickBird
@@ -106,32 +143,100 @@ export function RaceScreen({ onClose }: { onClose: () => void }) {
             onCourse={setCourse}
             onField={setField}
             onBack={() => setPhase('pick')}
-            onStart={start}
+            onStart={startSolo}
           />
         )}
 
-        {phase === 'run' && entrant && results && (
+        {phase === 'invite' && (
+          <FriendInvite
+            entrants={entrants}
+            now={now}
+            myName={state.myName}
+            onReadReply={() => setPhase('paste')}
+            onBack={() => setPhase('mode')}
+          />
+        )}
+
+        {phase === 'paste' && (
+          <FriendPaste
+            entrants={entrants}
+            now={now}
+            myName={state.myName}
+            onBack={() => setPhase('mode')}
+            onRun={(res, myId, reply) => {
+              setResults(res);
+              setMyRacerId(myId);
+              setFriend(true);
+              setReplyCode(reply);
+              setRecorded(false);
+              setPhase('run');
+            }}
+          />
+        )}
+
+        {phase === 'run' && results && myRacerId && (
           <RunTrack
             results={results}
-            entrantId={entrant.id}
+            entrantId={myRacerId}
             onDone={() => setPhase('done')}
           />
         )}
 
-        {phase === 'done' && entrant && results && (
+        {phase === 'done' && results && myRacerId && (
           <Results
             results={results}
-            entrantId={entrant.id}
-            field={field}
+            entrantId={myRacerId}
+            field={friend ? null : field}
+            replyCode={replyCode}
             onAgain={() => {
               setResults(null);
-              setPhase('pick');
+              setReplyCode(null);
+              setPhase('mode');
             }}
             onClose={onClose}
           />
         )}
       </View>
     </Modal>
+  );
+}
+
+// ---------------------------------------------------------------- 入口
+
+function ModePick({
+  onSolo,
+  onInvite,
+  onPaste,
+}: {
+  onSolo: () => void;
+  onInvite: () => void;
+  onPaste: () => void;
+}) {
+  return (
+    <ScrollView contentContainerStyle={styles.body}>
+      <Muted style={{ marginBottom: 18 }}>
+        放った鳩が鳩舎へ帰るまでの速さを競う、昔ながらの競技です。
+        育てた天分が、ここで活きます。
+      </Muted>
+      <Button label="ひとりで競う（相手は野良鳩）" onPress={onSolo} />
+      <Button
+        label="友達に挑戦する"
+        tone="quiet"
+        onPress={onInvite}
+        style={{ marginTop: 12 }}
+      />
+      <Button
+        label="コードで競う（招待・結果を読む）"
+        tone="quiet"
+        onPress={onPaste}
+        style={{ marginTop: 10 }}
+      />
+      <Muted style={{ marginTop: 16 }}>
+        友達戦は、招待コードを送り合うだけ。中継所も要りません。同じ種と
+        同じ二羽から、どちらの端末でも同じ勝敗になります。なつきは乗らず、
+        天分だけの勝負です。
+      </Muted>
+    </ScrollView>
   );
 }
 
@@ -370,33 +475,77 @@ function Results({
   results,
   entrantId,
   field,
+  replyCode,
   onAgain,
   onClose,
 }: {
   results: Result[];
   entrantId: string;
-  field: Field;
+  /** ひとり戦のときだけ。友達戦では null */
+  field: Field | null;
+  /** 挑戦を受けた側が、相手に返す結果コード */
+  replyCode: string | null;
   onAgain: () => void;
   onClose: () => void;
 }) {
   const me = results.find((r) => r.id === entrantId);
   const won = me ? placed(me.place) : false;
+  const duel = field === null; // 友達との一騎打ち
+  const [sent, setSent] = useState('');
+
+  const sendReply = async () => {
+    if (!replyCode) return;
+    const how = await copyOrShare(replyCode, '伝書鳩レースの結果');
+    setSent(
+      how === 'copied'
+        ? 'コピーしました。相手に送ってください。'
+        : how === 'shared'
+          ? '送りました。'
+          : '下の文字を選んでコピーしてください。'
+    );
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.body}>
       {me && (
         <View style={styles.verdict}>
           <Text style={styles.verdictPlace}>
-            {placeLabel(me.place)}
-            {me.place === 1 ? '　🏆' : won ? '　🎗️' : ''}
+            {duel
+              ? me.place === 1
+                ? '勝ち　🏆'
+                : '負け'
+              : placeLabel(me.place)}
+            {!duel && me.place === 1 ? '　🏆' : !duel && won ? '　🎗️' : ''}
           </Text>
           <Muted style={{ textAlign: 'center' }}>
-            {me.place === 1
-              ? `堂々の一着。${field.ribbon}を持ち帰りました。`
-              : won
-                ? `入賞。${field.ribbon}を持ち帰りました。`
-                : '今回は届きませんでした。走ったぶん、少しなつきました。'}
+            {duel
+              ? me.place === 1
+                ? '相手の鳩に競り勝ちました。'
+                : '今回は競り負けました。走ったぶん、少しなつきました。'
+              : me.place === 1
+                ? `堂々の一着。${field.ribbon}を持ち帰りました。`
+                : won
+                  ? `入賞。${field.ribbon}を持ち帰りました。`
+                  : '今回は届きませんでした。走ったぶん、少しなつきました。'}
           </Muted>
+        </View>
+      )}
+
+      {replyCode && (
+        <View style={styles.replyBox}>
+          <Muted style={{ textAlign: 'center', marginBottom: 10 }}>
+            この結果コードを相手に送ると、相手も同じ勝敗を見られます。
+          </Muted>
+          <QrView value={replyCode} size={180} />
+          <Button
+            label="結果コードを送る"
+            onPress={sendReply}
+            style={{ marginTop: 14, alignSelf: 'stretch' }}
+          />
+          {!!sent && <Text style={styles.sent}>{sent}</Text>}
+          <Text selectable style={styles.code}>
+            {replyCode}
+          </Text>
         </View>
       )}
 
@@ -427,6 +576,321 @@ function Results({
         onPress={onClose}
         style={{ marginTop: 10 }}
       />
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  );
+}
+
+// ---------------------------------------------------------------- 友達に挑戦
+
+/** 自分の鳩を一羽選ぶ、小さな一覧 */
+function EntrantList({
+  entrants,
+  now,
+  selectedId,
+  onSelect,
+}: {
+  entrants: Pigeon[];
+  now: number;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  if (entrants.length === 0) {
+    return (
+      <Muted>
+        いま出せる鳩がいません。元気な成鳥で、さっき走っていない鳩だけが
+        出られます。
+      </Muted>
+    );
+  }
+  return (
+    <>
+      {entrants.map((p) => {
+        const resting = raceReadyAt(p) > now;
+        const on = selectedId === p.id;
+        return (
+          <Pressable
+            key={p.id}
+            onPress={() => !resting && onSelect(p.id)}
+            style={[styles.pick, on && styles.pickOn, resting && { opacity: 0.5 }]}
+          >
+            <PigeonMark variant={p.variant} size={30} />
+            <View style={{ flex: 1 }}>
+              <View style={styles.pickName}>
+                <Text style={styles.name}>{p.name}</Text>
+                <GradeBadge gift={giftOf(p)} />
+              </View>
+              <Muted>
+                {resting
+                  ? `休養中。あと ${formatDuration(raceReadyAt(p) - now)}`
+                  : `翼 ${giftOf(p).wing}・心 ${giftOf(p).homing}・体 ${giftOf(p).grit}`}
+              </Muted>
+            </View>
+          </Pressable>
+        );
+      })}
+    </>
+  );
+}
+
+function FriendInvite({
+  entrants,
+  now,
+  myName,
+  onReadReply,
+  onBack,
+}: {
+  entrants: Pigeon[];
+  now: number;
+  myName: string;
+  onReadReply: () => void;
+  onBack: () => void;
+}) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [course, setCourse] = useState<Course>(COURSES[1]);
+  const [code, setCode] = useState<string | null>(null);
+  const [sent, setSent] = useState('');
+
+  const entrant = entrants.find((p) => p.id === selectedId) ?? null;
+
+  const make = () => {
+    if (!entrant) return;
+    const invite: Challenge = {
+      kind: 'inv',
+      seed: makeSeed(),
+      course: course.id,
+      from: { name: myName, pig: pigeonToRacePig(entrant) },
+    };
+    setCode(encodeChallenge(invite));
+    setSent('');
+  };
+
+  const share = async () => {
+    if (!code) return;
+    const how = await copyOrShare(code, '伝書鳩レースの招待');
+    setSent(
+      how === 'copied'
+        ? 'コピーしました。相手に送ってください。'
+        : how === 'shared'
+          ? '送りました。'
+          : '下の文字を選んでコピーしてください。'
+    );
+  };
+
+  if (code && entrant) {
+    return (
+      <ScrollView contentContainerStyle={styles.body}>
+        <Text style={styles.sub}>
+          {entrant.name}で、{course.name}に挑戦状を出しました。
+        </Text>
+        <Muted style={{ marginBottom: 14 }}>
+          この招待コードを相手に送り、「コードで競う」から読んでもらって
+          ください。相手が返してきた結果コードを、下の「結果コードを読む」で
+          読むと、同じ勝敗が見られます。
+        </Muted>
+        <View style={{ alignItems: 'center' }}>
+          <QrView value={code} size={200} />
+        </View>
+        <Button
+          label="招待コードを送る"
+          onPress={share}
+          style={{ marginTop: 16 }}
+        />
+        {!!sent && <Text style={styles.sent}>{sent}</Text>}
+        <Text selectable style={styles.code}>
+          {code}
+        </Text>
+        <Button
+          label="結果コードを読む"
+          tone="quiet"
+          onPress={onReadReply}
+          style={{ marginTop: 18 }}
+        />
+        <Button
+          label="挑戦をやめる"
+          tone="quiet"
+          onPress={onBack}
+          style={{ marginTop: 10 }}
+        />
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    );
+  }
+
+  return (
+    <ScrollView contentContainerStyle={styles.body}>
+      <Text style={styles.label}>出す鳩</Text>
+      <EntrantList
+        entrants={entrants}
+        now={now}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+      />
+      <Text style={styles.label}>コース</Text>
+      {COURSES.map((c) => (
+        <Pressable
+          key={c.id}
+          onPress={() => setCourse(c)}
+          style={[styles.option, course.id === c.id && styles.optionOn]}
+        >
+          <Text style={styles.optionName}>{c.name}</Text>
+          <Muted>{c.note}</Muted>
+        </Pressable>
+      ))}
+      <Button
+        label="招待状を作る"
+        onPress={make}
+        disabled={!entrant}
+        style={{ marginTop: 20 }}
+      />
+      <Button label="戻る" tone="quiet" onPress={onBack} style={{ marginTop: 10 }} />
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  );
+}
+
+function FriendPaste({
+  entrants,
+  now,
+  myName,
+  onBack,
+  onRun,
+}: {
+  entrants: Pigeon[];
+  now: number;
+  myName: string;
+  onBack: () => void;
+  onRun: (results: Result[], myRacerId: string, replyCode: string | null) => void;
+}) {
+  const [text, setText] = useState('');
+  const [error, setError] = useState('');
+  const [invite, setInvite] = useState<Challenge | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const read = () => {
+    setError('');
+    const trimmed = text.trim();
+    if (codeKind(trimmed) !== 'race') {
+      setError('これはレースのコードではありません。');
+      return;
+    }
+    const c = decodeChallenge(trimmed);
+    if (!c) {
+      setError('このコードは読み取れませんでした。');
+      return;
+    }
+    if (c.kind === 'res') {
+      // 自分が出した挑戦の結果。両方の鳩が入っているので、そのまま再現する
+      if (!c.foe) {
+        setError('この結果コードは欠けています。');
+        return;
+      }
+      const results = runDuel(
+        racePigToRacer(c.from.pig),
+        racePigToRacer(c.foe.pig),
+        courseById(c.course),
+        c.seed
+      );
+      // 挑んだ側にとって、自分の鳩は from
+      onRun(results, c.from.pig.id, null);
+      return;
+    }
+    // 挑戦状。自分の鳩を選んで受けて立つ
+    setInvite(c);
+  };
+
+  const accept = () => {
+    if (!invite) return;
+    const mine = entrants.find((p) => p.id === selectedId);
+    if (!mine) return;
+    const course = courseById(invite.course);
+    const results = runDuel(
+      racePigToRacer(invite.from.pig),
+      racePigToRacer(pigeonToRacePig(mine)),
+      course,
+      invite.seed
+    );
+    // 相手に返す結果コード（両方の鳩入り）
+    const reply = encodeChallenge({
+      kind: 'res',
+      seed: invite.seed,
+      course: invite.course,
+      from: invite.from,
+      foe: { name: myName, pig: pigeonToRacePig(mine) },
+    });
+    onRun(results, mine.id, reply);
+  };
+
+  if (invite) {
+    return (
+      <ScrollView contentContainerStyle={styles.body}>
+        <Text style={styles.sub}>
+          {invite.from.name}さんの挑戦
+        </Text>
+        <View style={styles.foeCard}>
+          <PigeonMark variant={invite.from.pig.variant} size={34} />
+          <View style={{ flex: 1 }}>
+            <View style={styles.pickName}>
+              <Text style={styles.name}>{invite.from.pig.name}</Text>
+              <GradeBadge gift={invite.from.pig.gift} />
+            </View>
+            <Muted>
+              {courseById(invite.course).name}・翼 {invite.from.pig.gift.wing}
+              ・心 {invite.from.pig.gift.homing}・体 {invite.from.pig.gift.grit}
+            </Muted>
+          </View>
+        </View>
+        <Text style={styles.label}>受けて立つ鳩</Text>
+        <EntrantList
+          entrants={entrants}
+          now={now}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+        />
+        <Button
+          label="受けて立つ"
+          onPress={accept}
+          disabled={!selectedId}
+          style={{ marginTop: 20 }}
+        />
+        <Button
+          label="やめる"
+          tone="quiet"
+          onPress={onBack}
+          style={{ marginTop: 10 }}
+        />
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    );
+  }
+
+  return (
+    <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <Muted style={{ marginBottom: 14 }}>
+        相手から届いた招待コード、または結果コードを貼り付けてください。
+      </Muted>
+      <TextInput
+        value={text}
+        onChangeText={(t) => {
+          setText(t);
+          setError('');
+        }}
+        placeholder="DENSHOBATO1R...."
+        placeholderTextColor={theme.inkFaint}
+        style={styles.paste}
+        multiline
+        autoCapitalize="none"
+        autoCorrect={false}
+        textAlignVertical="top"
+      />
+      {!!error && <Text style={styles.err}>{error}</Text>}
+      <Button
+        label="読む"
+        onPress={read}
+        disabled={text.trim().length === 0}
+        style={{ marginTop: 14 }}
+      />
+      <Button label="戻る" tone="quiet" onPress={onBack} style={{ marginTop: 10 }} />
       <View style={{ height: 40 }} />
     </ScrollView>
   );
@@ -554,6 +1018,44 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   gold: { color: '#A9671B' },
+  sub: { fontSize: 16, color: theme.ink, fontWeight: '600', marginBottom: 8 },
+  foeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 16,
+    backgroundColor: theme.paperDeep,
+    borderRadius: radius.md,
+    marginVertical: 12,
+  },
+  paste: {
+    minHeight: 120,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.line,
+    borderRadius: radius.sm,
+    padding: 12,
+    fontSize: 12,
+    color: theme.ink,
+  },
+  err: { marginTop: 10, fontSize: 13, color: theme.accent },
+  replyBox: {
+    alignItems: 'center',
+    backgroundColor: theme.paperDeep,
+    borderRadius: radius.md,
+    padding: 16,
+    marginBottom: 18,
+  },
+  sent: { marginTop: 10, fontSize: 13, color: theme.good },
+  code: {
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: theme.paper,
+    borderRadius: radius.sm,
+    fontSize: 10,
+    color: theme.inkSoft,
+    alignSelf: 'stretch',
+  },
   rankName: { flex: 1, fontSize: 15, color: theme.ink },
   rankRibbon: { fontSize: 14 },
 });

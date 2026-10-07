@@ -763,6 +763,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         };
       }
 
+      if (kind === 'race') {
+        return {
+          ok: false,
+          reason:
+            'これはレースのコードです。鳩舎 →「鳩レースに出す」→「コードで競う」から読んでください。',
+        };
+      }
+
       return {
         ok: false,
         reason: 'DENSHOBATO で始まる文字列を貼り付けてください。',

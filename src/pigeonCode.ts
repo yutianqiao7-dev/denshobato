@@ -12,6 +12,7 @@ const LETTER_PREFIX = 'DENSHOBATO1.';
 const PIGEON_PREFIX = 'DENSHOBATO1H.';
 const OBITUARY_PREFIX = 'DENSHOBATO1D.';
 const BACKUP_PREFIX = 'DENSHOBATO1B.';
+const RACE_PREFIX = 'DENSHOBATO1R.';
 
 const B64 =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -125,11 +126,12 @@ function unpack<T>(code: string, prefix: string): T | null {
 /** どの便りか。長い接頭辞から先に見る */
 export function codeKind(
   code: string
-): 'pigeon' | 'obituary' | 'backup' | 'letter' | null {
+): 'pigeon' | 'obituary' | 'backup' | 'race' | 'letter' | null {
   const trimmed = code.trim();
   if (trimmed.includes(PIGEON_PREFIX)) return 'pigeon';
   if (trimmed.includes(OBITUARY_PREFIX)) return 'obituary';
   if (trimmed.includes(BACKUP_PREFIX)) return 'backup';
+  if (trimmed.includes(RACE_PREFIX)) return 'race';
   if (trimmed.includes(LETTER_PREFIX)) return 'letter';
   return null;
 }
@@ -372,5 +374,69 @@ export function peekBackup(code: string) {
     pigeons: state.pigeons.filter((p) => p.diedAt === undefined).length,
     letters: state.letters.length,
     contacts: state.contacts.length,
+  };
+}
+
+// ------------------------------------------------------ 友達とのレース
+
+/** レースに出る一羽の、持ち運べる姿。天分まで入る */
+export type RacePig = {
+  id: string;
+  name: string;
+  variant: string;
+  gift: Gift;
+};
+
+/**
+ * 友達レースの招待・結果。
+ *
+ * 同じ種（seed）・同じ二羽・同じコースが揃えば、どちらの端末でも
+ * まったく同じ勝敗になる。だから中継所を通さずコードだけで競える。
+ *  - inv … 挑戦状。自分の鳩と、コースと、種を相手に渡す
+ *  - res … 結果。両方の鳩を入れて返すので、挑んだ側は読むだけで同じ結果を見る
+ */
+export type Challenge = {
+  kind: 'inv' | 'res';
+  seed: number;
+  course: string;
+  from: { name: string; pig: RacePig };
+  foe?: { name: string; pig: RacePig };
+};
+
+type ChallengePayload = {
+  v: 1;
+  k: 'inv' | 'res';
+  seed: number;
+  course: string;
+  fn: string;
+  fp: RacePig;
+  on?: string;
+  op?: RacePig;
+};
+
+export function encodeChallenge(c: Challenge): string {
+  const payload: ChallengePayload = {
+    v: 1,
+    k: c.kind,
+    seed: c.seed,
+    course: c.course,
+    fn: c.from.name || '名もなき挑戦者',
+    fp: c.from.pig,
+    on: c.foe?.name,
+    op: c.foe?.pig,
+  };
+  return pack(RACE_PREFIX, payload);
+}
+
+export function decodeChallenge(code: string): Challenge | null {
+  const p = unpack<ChallengePayload>(code, RACE_PREFIX);
+  if (!p || p.v !== 1 || !p.fp || !p.course) return null;
+  if (p.k !== 'inv' && p.k !== 'res') return null;
+  return {
+    kind: p.k,
+    seed: typeof p.seed === 'number' ? p.seed : 0,
+    course: p.course,
+    from: { name: p.fn || '挑戦者', pig: p.fp },
+    foe: p.op ? { name: p.on || '相手', pig: p.op } : undefined,
   };
 }

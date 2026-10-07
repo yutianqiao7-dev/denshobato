@@ -82,7 +82,30 @@ export function raceReadyAt(pigeon: Pigeon): number {
   return (pigeon.racedAt ?? 0) + RACE_REST;
 }
 
-const rand = (a: number, b: number) => a + Math.random() * (b - a);
+/** 0〜1 を返す乱数。ふだんは Math.random、友達戦では種から作る */
+export type Rng = () => number;
+
+/**
+ * 種から同じ数列を生むちいさな乱数（mulberry32）。
+ * 同じ種なら、どの端末でも同じ目が出る——だから二人が同じ結果を見られる。
+ */
+export function rngFrom(seed: number): Rng {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** 招待につける種。七桁ほどの数 */
+export function makeSeed(): number {
+  return Math.floor(Math.random() * 1_000_000_000);
+}
+
+const randWith = (rng: Rng, a: number, b: number) => a + rng() * (b - a);
 
 /**
  * 一羽の、このレースでの持ち時間。小さいほど速い。
@@ -90,7 +113,7 @@ const rand = (a: number, b: number) => a + Math.random() * (b - a);
  * コースごとの重みで、効く天分が変わる。短距離は翼、長距離は心と体。
  * その日の調子で ±、低い心はまれに大きく道を外す——番狂わせの余地。
  */
-function runTime(r: Racer, course: Course): number {
+function runTime(r: Racer, course: Course, rng: Rng): number {
   const g = r.gift;
   const n = (v: number) => v / GIFT_MAX; // 0〜1
   const w = course.weight;
@@ -103,10 +126,10 @@ function runTime(r: Racer, course: Course): number {
   // 地力が高いほど持ち時間は短い。60（最速）〜100（最遅）あたり
   let time = 100 - (perf + bond) * 40;
   // その日の調子。ここが番狂わせのもと。強い鳩でも四度に一度は取りこぼす
-  time += rand(-13, 13);
+  time += randWith(rng, -13, 13);
   // 心が低く、距離が長いほど、大きく道を外すことがある
   const strayChance = (1 - n(g.homing)) * (course.legs / 10) * 0.45;
-  if (Math.random() < strayChance) time += rand(10, 26);
+  if (rng() < strayChance) time += randWith(rng, 10, 26);
 
   return time;
 }
@@ -138,10 +161,31 @@ export function runRace(
 
   const field_ = [entrant, ...rivals];
   const timed = field_
-    .map((r) => ({ ...r, time: runTime(r, course) }))
+    .map((r) => ({ ...r, time: runTime(r, course, Math.random) }))
     .sort((a, b) => a.time - b.time)
     .map((r, i) => ({ ...r, place: i + 1 }));
   return timed;
+}
+
+/**
+ * 友達と一騎打ち。種を分け合えば、どちらの端末でも同じ結果になる。
+ *
+ * 持ち時間が同じ目になるよう、名前の順で乱数を回す（出走表の並びに
+ * 寄らず、同じ二羽・同じ種なら必ず同じ勝敗）。
+ */
+export function runDuel(
+  a: Racer,
+  b: Racer,
+  course: Course,
+  seed: number
+): Result[] {
+  const rng = rngFrom(seed);
+  // 二羽を決まった順に並べてから時間を引く（端末差が出ないように）
+  const order = [a, b].sort((x, y) => x.id.localeCompare(y.id));
+  const timed = order.map((r) => ({ ...r, time: runTime(r, course, rng) }));
+  return timed
+    .sort((x, y) => x.time - y.time)
+    .map((r, i) => ({ ...r, place: i + 1 }));
 }
 
 /** 相手の鳩の天分。大会の格に合わせて中心を上げる */
