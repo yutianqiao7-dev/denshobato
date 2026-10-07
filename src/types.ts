@@ -68,6 +68,10 @@ export type Pigeon = {
   gift?: Gift;
   /** 後天の「なつき」。餌と旅で育つ */
   bond?: number;
+  /** レースで入賞した回数。飾り羽根の数 */
+  ribbons?: number;
+  /** 最後にレースに出た時刻。続けては出られない */
+  racedAt?: number;
   /** 最後に卵を持った時刻。続けては産めない */
   bredAt?: number;
   /** 世話を促す通知の id */

@@ -40,6 +40,7 @@ import { Loft } from '../components/Loft';
 import { HungerGauge } from '../components/HungerGauge';
 import { GiftPanel, GradeBadge } from '../components/GiftPanel';
 import { giftOf } from '../gift';
+import { RaceScreen } from './RaceScreen';
 import { QrView } from '../components/QrView';
 import { QrScanner } from '../components/QrScanner';
 import { Notice } from './ReceiveScreen';
@@ -102,6 +103,7 @@ export function RoostScreen({
   const now = useNow(15000);
   const [giving, setGiving] = useState<Pigeon | null>(null);
   const [borrowing, setBorrowing] = useState(false);
+  const [racing, setRacing] = useState(false);
   const [acting, setActing] = useState<Pigeon | null>(null);
   const [taken, setTaken] = useState<Pigeon | null>(null);
   const [pairing, setPairing] = useState(false);
@@ -228,6 +230,15 @@ export function RoostScreen({
           style={{ flex: 1 }}
         />
       </View>
+      <Button
+        label="🏁 鳩レースに出す"
+        tone="quiet"
+        onPress={() => setRacing(true)}
+        style={{ marginTop: 10 }}
+      />
+      <Muted style={{ marginTop: 8 }}>
+        自分の鳩を放って、鳩舎へ帰る速さを競います。天分が活きる見せ場です。
+      </Muted>
       {canTakeStray && (
         <Button
           label="野良鳩を迎える"
@@ -448,6 +459,7 @@ export function RoostScreen({
           onClose={() => setTaken(null)}
         />
       )}
+      {racing && <RaceScreen onClose={() => setRacing(false)} />}
     </ScrollView>
   );
 }

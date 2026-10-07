@@ -120,6 +120,8 @@ type Store = {
   /** 世話をする */
   feedPigeon: (pigeonId: string) => void;
   feedAll: () => void;
+  /** レースの結果を書き留める（なつき・飾り羽根・休み） */
+  recordRace: (pigeonId: string, place: number) => void;
   addContact: (input: { name: string; emoji: string; place: Place }) => Contact;
   removeContact: (id: string) => void;
   /** 預かっている鳩に手紙を持たせて放つ */
@@ -480,6 +482,28 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         .map((p) => p.id)
     );
   }, [feed]);
+
+  /**
+   * レースの結果を書き留める。
+   * 走ると少しなつき、入賞すれば飾り羽根が一枚増える。しばらく休む。
+   */
+  const recordRace = useCallback((pigeonId: string, place: number) => {
+    const now = Date.now();
+    setState((s) => ({
+      ...s,
+      pigeons: s.pigeons.map((p) =>
+        p.id === pigeonId
+          ? {
+              ...p,
+              racedAt: now,
+              // 一緒に走ると、連れ添うほどなつく。入賞ならなお
+              bond: Math.min(99, (p.bond ?? 0) + (place <= 3 ? 2 : 1)),
+              ribbons: (p.ribbons ?? 0) + (place <= 3 ? 1 : 0),
+            }
+          : p
+      ),
+    }));
+  }, []);
 
   const addContact = useCallback(
     (input: { name: string; emoji: string; place: Place }) => {
@@ -1025,6 +1049,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       givePigeon,
       feedPigeon,
       feedAll,
+      recordRace,
       addContact,
       removeContact,
       releaseLetter,
@@ -1056,6 +1081,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       givePigeon,
       feedPigeon,
       feedAll,
+      recordRace,
       addContact,
       removeContact,
       releaseLetter,

@@ -69,6 +69,11 @@ export function GiftPanel({ pigeon }: { pigeon: Pigeon }) {
           {bondOf(pigeon) >= 30 ? '（もう離れない）' : ''}
         </Text>
       )}
+      {(pigeon.ribbons ?? 0) > 0 && (
+        <Text style={styles.ribbonLine}>
+          レース入賞 {pigeon.ribbons}回 {'🎗️'.repeat(Math.min(5, pigeon.ribbons ?? 0))}
+        </Text>
+      )}
     </View>
   );
 }
@@ -107,4 +112,5 @@ const styles = StyleSheet.create({
   stars: { fontSize: 12, color: theme.accent, width: 64, textAlign: 'right' },
   note: { fontSize: 11, color: theme.inkFaint, marginTop: 8, lineHeight: 16 },
   bond: { fontSize: 13, color: theme.good, marginTop: 8, fontWeight: '600' },
+  ribbonLine: { fontSize: 13, color: theme.accent, marginTop: 6 },
 });
